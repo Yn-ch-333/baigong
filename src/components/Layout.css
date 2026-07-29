@@ -297,6 +297,24 @@
   margin: -6px 0 12px;
 }
 
+.login-toggle {
+  text-align: center;
+  margin-top: 12px;
+}
+
+.login-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--brass);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.login-toggle-btn:hover {
+  color: var(--fg);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
