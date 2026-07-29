@@ -1,0 +1,69 @@
+{
+  "data": [
+    {
+      "id": "page-index",
+      "title": "百工论坛 · 首页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1785320000000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "index.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "image-001",
+      "title": "主题背景层 - 机械臂",
+      "type": "image",
+      "version": 1,
+      "createdAt": 1785335000000,
+      "canvasData": {
+        "x": 0,
+        "y": 377
+      },
+      "devMetadata": {
+        "imageSrc": "assets/theme-bg.jpg"
+      }
+    },
+    {
+      "id": "image-002",
+      "title": "主题叠加层 - 1960 Logo",
+      "type": "image",
+      "version": 1,
+      "createdAt": 1785335000000,
+      "canvasData": {
+        "x": 620,
+        "y": 377
+      },
+      "devMetadata": {
+        "imageSrc": "assets/theme-overlay.png"
+      }
+    },
+    {
+      "id": "image-003",
+      "title": "世界地图 - 工业分布",
+      "type": "image",
+      "version": 1,
+      "createdAt": 1785335000000,
+      "canvasData": {
+        "x": 1240,
+        "y": 377
+      },
+      "devMetadata": {
+        "imageSrc": "assets/world-map.jpg"
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "百工论坛",
+    "visualEditorEnabled": false,
+    "showEdge": true
+  }
+}
