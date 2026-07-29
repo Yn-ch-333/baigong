@@ -1,0 +1,155 @@
+.entry-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.entry-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(31, 77, 56, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 77, 56, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.entry-console {
+  position: relative;
+  width: 620px;
+  max-width: 92vw;
+  background: rgba(10, 10, 11, 0.92);
+  border: 1px solid var(--green-line);
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7), inset 0 0 40px rgba(31, 77, 56, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.entry-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.entry-brand-cn {
+  color: var(--green);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 6px;
+}
+
+.entry-brand-de {
+  color: var(--green);
+  font-size: 14px;
+  letter-spacing: 2px;
+  opacity: 0.9;
+}
+
+.entry-cursor {
+  width: 10px;
+  height: 18px;
+  background: var(--green-bright);
+  margin-left: 4px;
+  animation: blink 1s step-end infinite;
+}
+
+.entry-boot {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.entry-progress {
+  height: 4px;
+  background: rgba(39, 78, 58, 0.4);
+  border-radius: 2px;
+  margin: 12px 0;
+  overflow: hidden;
+}
+
+.entry-progress-bar {
+  height: 100%;
+  background: var(--green-bright);
+  box-shadow: 0 0 10px var(--green-bright);
+  transition: width 40ms linear;
+}
+
+.entry-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.entry-tagline {
+  margin: 0;
+  color: var(--brass);
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
+.entry-features {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.entry-features li {
+  padding-left: 4px;
+}
+
+.entry-features li::marker {
+  color: var(--green-bright);
+}
+
+.entry-enter-btn {
+  width: 100%;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--green-soft);
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  color: var(--brass);
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.entry-enter-btn:hover {
+  background: var(--green-line);
+  color: var(--brass-bright);
+}
+
+.entry-enter-hint {
+  color: var(--fg-3);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry-cursor {
+    animation: none;
+  }
+  .entry-progress-bar {
+    transition: none;
+  }
+}
