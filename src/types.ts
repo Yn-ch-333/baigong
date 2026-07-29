@@ -6,6 +6,8 @@ export interface User {
   role?: 'user' | 'admin'
   banned?: boolean
   joinDate?: string
+  username?: string
+  password?: string
 }
 
 export interface Post {
