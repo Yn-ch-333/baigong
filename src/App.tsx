@@ -38,7 +38,21 @@ function App() {
   const [entered, setEntered] = useState(false)
   const [page, setPage] = useState<PageRoute>('home')
   const [user, setUser] = useState<User | null>(null)
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS)
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem('baigong-registered-users')
+      const registered: User[] = saved ? JSON.parse(saved) : []
+      const merged = [...INITIAL_USERS]
+      registered.forEach(u => {
+        if (!merged.find(existing => existing.id === u.id || existing.username === u.username)) {
+          merged.push(u)
+        }
+      })
+      return merged
+    } catch {
+      return INITIAL_USERS
+    }
+  })
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES)
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS)
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
@@ -51,6 +65,18 @@ function App() {
   const [messageTargetId, setMessageTargetId] = useState<string>('')
   const [theme, setTheme] = useState<ThemeColors>(DEFAULT_THEME)
   const [themeOpen, setThemeOpen] = useState(false)
+
+  const handleRegisterUser = useCallback((newUser: User) => {
+    setUsers(prev => {
+      if (prev.find(u => u.username === newUser.username || u.id === newUser.id)) {
+        return prev
+      }
+      const next = [...prev, newUser]
+      const registered = next.filter(u => !INITIAL_USERS.find(init => init.id === u.id))
+      localStorage.setItem('baigong-registered-users', JSON.stringify(registered))
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -200,6 +226,7 @@ function App() {
         page={page}
         user={user}
         setUser={setUser}
+        users={users}
         categories={categories}
         onPost={handlePost}
         onNavigate={navigate}
@@ -208,6 +235,7 @@ function App() {
         onOpenTheme={() => setThemeOpen(true)}
         isAdmin={user?.role === 'admin'}
         theme={theme}
+        onRegisterUser={handleRegisterUser}
       >
         {page === 'home' && (
           <Home
