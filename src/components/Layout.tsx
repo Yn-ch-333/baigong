@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { User, Category, Post, PageRoute, ThemeColors } from '../types'
+import { INITIAL_USERS } from '../data'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
   IconMail, IconUser, IconPlus, IconClose,
@@ -36,6 +37,7 @@ export default function Layout({
   theme,
 }: LayoutProps) {
   const [loginOpen, setLoginOpen] = useState(false)
+  const [loginError, setLoginError] = useState('')
   const [postOpen, setPostOpen] = useState(false)
 
   const idleTimerRef = useRef<number | null>(null)
@@ -69,9 +71,18 @@ export default function Layout({
   const handleLogin = useCallback((e: React.FormEvent) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget as HTMLFormElement)
-    const name = String(fd.get('username') || '工程师')
-    setUser({ id: 'u1', name, avatar: name[0], role: 'admin' })
-    setLoginOpen(false)
+    const username = String(fd.get('username') || '').trim()
+    const password = String(fd.get('password') || '').trim()
+    const matched = INITIAL_USERS.find(
+      u => u.username === username && u.password === password
+    )
+    if (matched) {
+      setUser(matched)
+      setLoginError('')
+      setLoginOpen(false)
+    } else {
+      setLoginError('账号或密码错误，仅管理员可登录')
+    }
   }, [setUser])
 
   const handlePost = useCallback((e: React.FormEvent) => {
@@ -200,6 +211,7 @@ export default function Layout({
                 密码
                 <input name="password" type="password" className="field-input" placeholder="输入密码" required />
               </label>
+              {loginError && <p className="login-error">{loginError}</p>}
               <button type="submit" className="btn-primary">登录</button>
             </form>
           </div>
