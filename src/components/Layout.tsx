@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { User, Category, Post, PageRoute, ThemeColors } from '../types'
-import { INITIAL_USERS } from '../data'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
   IconMail, IconUser, IconPlus, IconClose,
@@ -11,6 +10,7 @@ interface LayoutProps {
   page: PageRoute
   user: User | null
   setUser: (u: User | null) => void
+  users: User[]
   categories: Category[]
   onPost: (p: Post) => void
   children: React.ReactNode
@@ -20,12 +20,14 @@ interface LayoutProps {
   onOpenTheme: () => void
   isAdmin?: boolean
   theme?: ThemeColors
+  onRegisterUser: (u: User) => void
 }
 
 export default function Layout({
   page,
   user,
   setUser,
+  users,
   categories,
   onPost,
   children,
@@ -35,8 +37,10 @@ export default function Layout({
   onOpenTheme,
   isAdmin,
   theme,
+  onRegisterUser,
 }: LayoutProps) {
   const [loginOpen, setLoginOpen] = useState(false)
+  const [isRegistering, setIsRegistering] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [postOpen, setPostOpen] = useState(false)
 
@@ -73,7 +77,7 @@ export default function Layout({
     const fd = new FormData(e.currentTarget as HTMLFormElement)
     const username = String(fd.get('username') || '').trim()
     const password = String(fd.get('password') || '').trim()
-    const matched = INITIAL_USERS.find(
+    const matched = users.find(
       u => u.username === username && u.password === password
     )
     if (matched) {
@@ -81,9 +85,47 @@ export default function Layout({
       setLoginError('')
       setLoginOpen(false)
     } else {
-      setLoginError('账号或密码错误，仅管理员可登录')
+      setLoginError('账号或密码错误')
     }
-  }, [setUser])
+  }, [setUser, users])
+
+  const handleRegister = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget as HTMLFormElement)
+    const username = String(fd.get('username') || '').trim()
+    const password = String(fd.get('password') || '').trim()
+    const confirm = String(fd.get('confirmPassword') || '').trim()
+    const name = String(fd.get('name') || '').trim()
+    const bio = String(fd.get('bio') || '').trim()
+
+    if (!username || !password || !name) {
+      setLoginError('请填写用户名、密码和昵称')
+      return
+    }
+    if (password !== confirm) {
+      setLoginError('两次输入的密码不一致')
+      return
+    }
+    if (users.some(u => u.username === username)) {
+      setLoginError('该用户名已被注册')
+      return
+    }
+
+    const newUser: User = {
+      id: `ur${Date.now()}`,
+      name,
+      avatar: name[0] || '工',
+      bio: bio || '新晋工程师',
+      role: 'user',
+      joinDate: new Date().toISOString().slice(0, 10).replace(/-/g, '.'),
+      username,
+      password,
+    }
+    onRegisterUser(newUser)
+    setUser(newUser)
+    setLoginError('')
+    setLoginOpen(false)
+  }, [onRegisterUser, setUser, users])
 
   const handlePost = useCallback((e: React.FormEvent) => {
     e.preventDefault()
@@ -199,10 +241,10 @@ export default function Layout({
         <div className="modal-overlay" onClick={() => setLoginOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>登录 / 注册</h3>
+              <h3>{isRegistering ? '注册账号' : '登录'}</h3>
               <button className="modal-close" onClick={() => setLoginOpen(false)} aria-label="关闭"><IconClose /></button>
             </div>
-            <form onSubmit={handleLogin}>
+            <form onSubmit={isRegistering ? handleRegister : handleLogin}>
               <label className="field-label">
                 用户名
                 <input name="username" className="field-input" placeholder="输入用户名" required />
@@ -211,9 +253,36 @@ export default function Layout({
                 密码
                 <input name="password" type="password" className="field-input" placeholder="输入密码" required />
               </label>
+              {isRegistering && (
+                <>
+                  <label className="field-label">
+                    确认密码
+                    <input name="confirmPassword" type="password" className="field-input" placeholder="再次输入密码" required />
+                  </label>
+                  <label className="field-label">
+                    昵称
+                    <input name="name" className="field-input" placeholder="显示昵称" required />
+                  </label>
+                  <label className="field-label">
+                    个人简介
+                    <input name="bio" className="field-input" placeholder="一句话介绍" />
+                  </label>
+                </>
+              )}
               {loginError && <p className="login-error">{loginError}</p>}
-              <button type="submit" className="btn-primary">登录</button>
+              <button type="submit" className="btn-primary">
+                {isRegistering ? '注册' : '登录'}
+              </button>
             </form>
+            <div className="login-toggle">
+              <button
+                type="button"
+                className="login-toggle-btn"
+                onClick={() => { setIsRegistering(!isRegistering); setLoginError('') }}
+              >
+                {isRegistering ? '已有账号？去登录' : '没有账号？去注册'}
+              </button>
+            </div>
           </div>
         </div>
       )}
