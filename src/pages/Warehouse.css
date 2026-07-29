@@ -1,0 +1,208 @@
+.warehouse-center {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+  overflow-y: auto;
+}
+
+.warehouse-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.warehouse-page-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--brass);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.warehouse-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  background: var(--green-soft);
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  color: var(--brass);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.warehouse-add-btn:hover {
+  background: var(--green-line);
+  color: var(--brass-bright);
+}
+
+.warehouse-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.warehouse-stat {
+  background: var(--bg-panel);
+  border: 1px solid var(--green-line);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.warehouse-stat-value {
+  color: var(--brass);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.warehouse-stat-label {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.warehouse-stat.normal .warehouse-stat-value {
+  color: var(--green-bright);
+}
+
+.warehouse-stat.low .warehouse-stat-value {
+  color: var(--brass-bright);
+}
+
+.warehouse-stat.out .warehouse-stat-value {
+  color: var(--red);
+}
+
+.warehouse-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--green-line);
+  border-radius: var(--radius);
+}
+
+.warehouse-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.warehouse-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  z-index: 1;
+}
+
+.warehouse-table th {
+  padding: 12px 14px;
+  text-align: left;
+  color: var(--fg-2);
+  font-weight: 600;
+  border-bottom: 1px solid var(--green-line);
+  white-space: nowrap;
+}
+
+.warehouse-table td {
+  padding: 12px 14px;
+  color: var(--fg);
+  border-bottom: 1px solid var(--green-line);
+  white-space: nowrap;
+}
+
+.warehouse-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.warehouse-name {
+  font-weight: 500;
+  color: var(--fg);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.warehouse-status {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-size: 11px;
+  border: 1px solid var(--green-line);
+  color: var(--fg-2);
+}
+
+.warehouse-status.normal {
+  background: rgba(62, 155, 110, 0.12);
+  border-color: rgba(62, 155, 110, 0.4);
+  color: var(--green-bright);
+}
+
+.warehouse-status.low {
+  background: rgba(201, 169, 97, 0.12);
+  border-color: rgba(201, 169, 97, 0.4);
+  color: var(--brass-bright);
+}
+
+.warehouse-status.out {
+  background: rgba(229, 57, 53, 0.12);
+  border-color: rgba(229, 57, 53, 0.4);
+  color: var(--red);
+}
+
+.warehouse-delete-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+
+.warehouse-delete-btn:hover {
+  color: var(--red);
+  border-color: rgba(229, 57, 53, 0.4);
+  background: rgba(229, 57, 53, 0.08);
+}
+
+.warehouse-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--fg-3);
+  font-size: 12px;
+}
+
+.warehouse-hint p {
+  margin: 0 0 8px;
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.warehouse-hint p:last-child {
+  margin-bottom: 0;
+}
+
+.warehouse-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
