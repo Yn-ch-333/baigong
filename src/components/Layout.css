@@ -291,6 +291,12 @@
   margin: 0 0 14px;
 }
 
+.login-error {
+  color: var(--red);
+  font-size: 12px;
+  margin: -6px 0 12px;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
