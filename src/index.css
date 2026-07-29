@@ -1,0 +1,51 @@
+:root {
+  --bg: #000000;
+  --bg-panel: #0a0a0b;
+  --fg: #ece9e0;
+  --fg-2: #9a988c;
+  --fg-3: #56544a;
+  --brass: #c9a961;
+  --brass-bright: #e2c178;
+  --brass-dim: #7e6638;
+  --green: #1f4d38;
+  --green-line: #274e3a;
+  --green-bright: #3e9b6e;
+  --green-soft: #143024;
+  --red: #e53935;
+  --radius: 6px;
+  --header-h: 56px;
+  --sidebar-w: 56px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--green-line);
+  border-radius: 2px;
+}
