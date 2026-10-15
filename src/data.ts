@@ -1,7 +1,7 @@
 import type { Category, Post, User, Message, WarehouseItem, Comment, Collection } from './types'
 
 export const INITIAL_USERS: User[] = [
-  { id: 'u1', name: '杨工', avatar: '杨', bio: '频道主', role: 'admin', joinDate: '2025.03.12', username: 'yn', password: '061202' },
+  { id: 'u1', name: '杨工', avatar: '杨', bio: '频道主', role: 'admin', joinDate: '2025.03.12', username: 'yn', password: 'bg2026' },
   { id: 'u2', name: '林工', avatar: '林', bio: '产线控制与运动控制实践者', joinDate: '2025.05.08' },
   { id: 'u3', name: '赵工', avatar: '赵', bio: '协作机器人应用集成', joinDate: '2025.06.21' },
   { id: 'u4', name: '王工', avatar: '王', bio: 'EtherCAT / Profinet 总线调优', joinDate: '2025.07.15' },
