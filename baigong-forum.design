@@ -31,7 +31,11 @@
       "createdAt": 1785335000000,
       "canvasData": {
         "x": 0,
-        "y": 373
+        "y": 115,
+        "naturalSize": {
+          "width": 2132,
+          "height": 1600
+        }
       },
       "devMetadata": {
         "imageSrc": "assets/theme-bg.jpg"
@@ -45,7 +49,11 @@
       "createdAt": 1785335000000,
       "canvasData": {
         "x": 480,
-        "y": 373
+        "y": 115,
+        "naturalSize": {
+          "width": 1781,
+          "height": 1920
+        }
       },
       "devMetadata": {
         "imageSrc": "assets/theme-overlay.png"
@@ -59,7 +67,11 @@
       "createdAt": 1785335000000,
       "canvasData": {
         "x": 960,
-        "y": 373
+        "y": 115,
+        "naturalSize": {
+          "width": 2560,
+          "height": 1440
+        }
       },
       "devMetadata": {
         "imageSrc": "assets/world-map.jpg"
