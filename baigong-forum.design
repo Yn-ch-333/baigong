@@ -9,7 +9,14 @@
       "canvasData": {
         "x": 0,
         "y": 0,
-        "group": 0
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 16,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-f38637f5",
+          "measuredAt": 1792070548977
+        }
       },
       "devMetadata": {
         "htmlSrc": "index.html",
@@ -24,7 +31,7 @@
       "createdAt": 1785335000000,
       "canvasData": {
         "x": 0,
-        "y": 377
+        "y": 373
       },
       "devMetadata": {
         "imageSrc": "assets/theme-bg.jpg"
@@ -37,8 +44,8 @@
       "version": 1,
       "createdAt": 1785335000000,
       "canvasData": {
-        "x": 620,
-        "y": 377
+        "x": 480,
+        "y": 373
       },
       "devMetadata": {
         "imageSrc": "assets/theme-overlay.png"
@@ -51,8 +58,8 @@
       "version": 1,
       "createdAt": 1785335000000,
       "canvasData": {
-        "x": 1240,
-        "y": 377
+        "x": 960,
+        "y": 373
       },
       "devMetadata": {
         "imageSrc": "assets/world-map.jpg"

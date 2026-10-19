@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
-import type { User, WarehouseItem } from '../types'
+import type { User, WarehouseItem, Post } from '../types'
+import { downloadAttachment, formatFileSize } from '../fileStore'
 import {
   IconWarehouse, IconFilter, IconPlus, IconClose,
+  IconFile, IconDownload,
 } from '../icons'
 import './Warehouse.css'
 
@@ -9,8 +11,11 @@ interface WarehouseProps {
   currentUser: User | null
   items: WarehouseItem[]
   users: User[]
+  posts: Post[]
   onAdd: (item: WarehouseItem) => void
   onDelete: (itemId: string) => void
+  onViewPost: (postId: string) => void
+  onDeleteAttachment: (postId: string, fileId: string) => void
 }
 
 const IconTrash = () => (
@@ -23,9 +28,57 @@ const statusMap: Record<WarehouseItem['status'], string> = {
   out: '已耗尽',
 }
 
-export default function Warehouse({ currentUser, items, users: _users, onAdd, onDelete }: WarehouseProps) {
+interface FileRecord {
+  id: string
+  name: string
+  size: number
+  type: string
+  postId: string
+  postTitle: string
+  uploader: string
+  date: string
+}
+
+export default function Warehouse({
+  currentUser,
+  items,
+  users: _users,
+  posts,
+  onAdd,
+  onDelete,
+  onViewPost,
+  onDeleteAttachment,
+}: WarehouseProps) {
   const [search, setSearch] = useState('')
+  const [fileSearch, setFileSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+  const [tab, setTab] = useState<'files' | 'items'>('files')
+
+  const allFiles = useMemo<FileRecord[]>(() => (
+    posts.flatMap(p =>
+      (p.attachments || []).map(a => ({
+        ...a,
+        postId: p.id,
+        postTitle: p.title,
+        uploader: p.author,
+        date: p.date,
+      }))
+    )
+  ), [posts])
+
+  const totalFileSize = useMemo(
+    () => allFiles.reduce((sum, f) => sum + f.size, 0),
+    [allFiles]
+  )
+
+  const filteredFiles = useMemo(() => {
+    const q = fileSearch.trim()
+    if (!q) return allFiles
+    return allFiles.filter(f =>
+      f.name.toLowerCase().includes(q.toLowerCase()) ||
+      f.postTitle.includes(q) || f.uploader.includes(q)
+    )
+  }, [allFiles, fileSearch])
 
   const filteredItems = useMemo(() => {
     return items.filter(i =>
@@ -78,78 +131,190 @@ export default function Warehouse({ currentUser, items, users: _users, onAdd, on
           </button>
         </div>
 
-        <div className="warehouse-stats">
-          <div className="warehouse-stat">
-            <span className="warehouse-stat-value">{stats.total}</span>
-            <span className="warehouse-stat-label">总条目</span>
-          </div>
-          <div className="warehouse-stat normal">
-            <span className="warehouse-stat-value">{stats.normal}</span>
-            <span className="warehouse-stat-label">库存正常</span>
-          </div>
-          <div className="warehouse-stat low">
-            <span className="warehouse-stat-value">{stats.low}</span>
-            <span className="warehouse-stat-label">库存不足</span>
-          </div>
-          <div className="warehouse-stat out">
-            <span className="warehouse-stat-value">{stats.out}</span>
-            <span className="warehouse-stat-label">已耗尽</span>
-          </div>
+        <div className="warehouse-tabs">
+          <button
+            className={`warehouse-tab ${tab === 'files' ? 'active' : ''}`}
+            onClick={() => setTab('files')}
+          >
+            <IconFile /> 文件档案
+            <span className="chip-count">{allFiles.length}</span>
+          </button>
+          <button
+            className={`warehouse-tab ${tab === 'items' ? 'active' : ''}`}
+            onClick={() => setTab('items')}
+          >
+            <IconWarehouse /> 物料台账
+            <span className="chip-count">{stats.total}</span>
+          </button>
         </div>
 
-        <div className="search-wrap">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="检索物料名称 / 分类 / 库位"
-            aria-label="搜索仓库"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <span className="search-icon"><IconFilter /></span>
-        </div>
+        {tab === 'files' && (
+          <>
+            <div className="warehouse-file-stats">
+              <div className="warehouse-stat">
+                <span className="warehouse-stat-value">{allFiles.length}</span>
+                <span className="warehouse-stat-label">文件总数</span>
+              </div>
+              <div className="warehouse-stat">
+                <span className="warehouse-stat-value">{formatFileSize(totalFileSize)}</span>
+                <span className="warehouse-stat-label">占用空间</span>
+              </div>
+            </div>
 
-        <div className="warehouse-table-wrap">
-          <table className="warehouse-table">
-            <thead>
-              <tr>
-                <th>物料名称</th>
-                <th>分类</th>
-                <th>数量</th>
-                <th>库位</th>
-                <th>状态</th>
-                <th>负责人</th>
-                <th>更新时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map(item => (
-                <tr key={item.id}>
-                  <td className="warehouse-name">{item.name}</td>
-                  <td><span className="item-tag">{item.category}</span></td>
-                  <td>{item.quantity} {item.unit}</td>
-                  <td>{item.location}</td>
-                  <td>
-                    <span className={`warehouse-status ${item.status}`}>
-                      {statusMap[item.status]}
-                    </span>
-                  </td>
-                  <td>{item.ownerName || '-'}</td>
-                  <td>{item.updatedAt}</td>
-                  <td>
-                    <button className="warehouse-delete-btn" onClick={() => onDelete(item.id)}>
-                      <IconTrash />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredItems.length === 0 && (
-            <div className="warehouse-empty">未找到匹配的物料</div>
-          )}
-        </div>
+            <div className="search-wrap">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="检索文件名 / 来源帖子 / 上传者"
+                aria-label="搜索文件"
+                value={fileSearch}
+                onChange={e => setFileSearch(e.target.value)}
+              />
+              <span className="search-icon"><IconFilter /></span>
+            </div>
+
+            <div className="warehouse-table-wrap">
+              <table className="warehouse-table">
+                <thead>
+                  <tr>
+                    <th>文件名</th>
+                    <th>大小</th>
+                    <th>来源帖子</th>
+                    <th>上传者</th>
+                    <th>上传日期</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFiles.map(f => (
+                    <tr key={f.id}>
+                      <td className="warehouse-name">
+                        <span className="warehouse-file-cell">
+                          <IconFile />
+                          {f.name}
+                        </span>
+                      </td>
+                      <td>{formatFileSize(f.size)}</td>
+                      <td>
+                        <button
+                          className="warehouse-post-link"
+                          onClick={() => onViewPost(f.postId)}
+                          title={f.postTitle}
+                        >
+                          {f.postTitle}
+                        </button>
+                      </td>
+                      <td>{f.uploader}</td>
+                      <td>{f.date}</td>
+                      <td>
+                        <div className="warehouse-file-actions">
+                          <button
+                            className="warehouse-file-btn"
+                            onClick={() => downloadAttachment(f.id, f.name)}
+                            aria-label={`下载 ${f.name}`}
+                            title="下载"
+                          >
+                            <IconDownload />
+                          </button>
+                          <button
+                            className="warehouse-delete-btn"
+                            onClick={() => onDeleteAttachment(f.postId, f.id)}
+                            aria-label={`删除 ${f.name}`}
+                            title="删除"
+                          >
+                            <IconTrash />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredFiles.length === 0 && (
+                <div className="warehouse-empty">
+                  {allFiles.length === 0 ? '暂无文件，发帖时添加附件即可存入仓库' : '未找到匹配的文件'}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {tab === 'items' && (
+          <>
+            <div className="warehouse-stats">
+              <div className="warehouse-stat">
+                <span className="warehouse-stat-value">{stats.total}</span>
+                <span className="warehouse-stat-label">总条目</span>
+              </div>
+              <div className="warehouse-stat normal">
+                <span className="warehouse-stat-value">{stats.normal}</span>
+                <span className="warehouse-stat-label">库存正常</span>
+              </div>
+              <div className="warehouse-stat low">
+                <span className="warehouse-stat-value">{stats.low}</span>
+                <span className="warehouse-stat-label">库存不足</span>
+              </div>
+              <div className="warehouse-stat out">
+                <span className="warehouse-stat-value">{stats.out}</span>
+                <span className="warehouse-stat-label">已耗尽</span>
+              </div>
+            </div>
+
+            <div className="search-wrap">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="检索物料名称 / 分类 / 库位"
+                aria-label="搜索仓库"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              <span className="search-icon"><IconFilter /></span>
+            </div>
+
+            <div className="warehouse-table-wrap">
+              <table className="warehouse-table">
+                <thead>
+                  <tr>
+                    <th>物料名称</th>
+                    <th>分类</th>
+                    <th>数量</th>
+                    <th>库位</th>
+                    <th>状态</th>
+                    <th>负责人</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map(item => (
+                    <tr key={item.id}>
+                      <td className="warehouse-name">{item.name}</td>
+                      <td><span className="item-tag">{item.category}</span></td>
+                      <td>{item.quantity} {item.unit}</td>
+                      <td>{item.location}</td>
+                      <td>
+                        <span className={`warehouse-status ${item.status}`}>
+                          {statusMap[item.status]}
+                        </span>
+                      </td>
+                      <td>{item.ownerName || '-'}</td>
+                      <td>{item.updatedAt}</td>
+                      <td>
+                        <button className="warehouse-delete-btn" onClick={() => onDelete(item.id)}>
+                          <IconTrash />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredItems.length === 0 && (
+                <div className="warehouse-empty">未找到匹配的物料</div>
+              )}
+            </div>
+          </>
+        )}
       </section>
 
       <aside className="right-modules">
@@ -161,7 +326,8 @@ export default function Warehouse({ currentUser, items, users: _users, onAdd, on
           </div>
           <div className="module-body">
             <div className="warehouse-hint">
-              <p>仓库用于管理论坛成员共享的工业设备、元器件与耗材。</p>
+              <p>文件档案：发帖时上传的附件统一存放在这里，可随时下载或删除。</p>
+              <p>物料台账：管理论坛成员共享的工业设备、元器件与耗材。</p>
               <p>数量 ≤ 0 标记为“已耗尽”，≤ 5 标记为“库存不足”。</p>
             </div>
           </div>

@@ -10,6 +10,7 @@ import Messages from './pages/Messages'
 import Warehouse from './pages/Warehouse'
 import ThemeModal from './components/ThemeModal'
 import MusicPlayer from './components/MusicPlayer'
+import { deleteFile } from './fileStore'
 import type { User, Post, Category, Message, WarehouseItem, Comment, Collection, PageRoute, ThemeColors } from './types'
 import {
   INITIAL_CATEGORIES,
@@ -34,6 +35,15 @@ const DEFAULT_THEME: ThemeColors = {
   overlayImage: defaultOverlayImage,
 }
 
+function loadSaved<T>(key: string, fallback: T[]): T[] {
+  try {
+    const saved = localStorage.getItem(key)
+    return saved ? JSON.parse(saved) as T[] : fallback
+  } catch {
+    return fallback
+  }
+}
+
 function App() {
   const [entered, setEntered] = useState(false)
   const [page, setPage] = useState<PageRoute>('home')
@@ -54,10 +64,10 @@ function App() {
     }
   })
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES)
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS)
+  const [posts, setPosts] = useState<Post[]>(() => loadSaved('baigong-posts', INITIAL_POSTS))
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
-  const [warehouse, setWarehouse] = useState<WarehouseItem[]>(INITIAL_WAREHOUSE)
-  const [comments, setComments] = useState<Comment[]>(INITIAL_COMMENTS)
+  const [warehouse, setWarehouse] = useState<WarehouseItem[]>(() => loadSaved('baigong-warehouse', INITIAL_WAREHOUSE))
+  const [comments, setComments] = useState<Comment[]>(() => loadSaved('baigong-comments', INITIAL_COMMENTS))
   const [collections, setCollections] = useState<Collection[]>(INITIAL_COLLECTIONS)
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
@@ -91,6 +101,18 @@ function App() {
     root.style.setProperty('--theme-overlay-image', theme.overlayImage ? `url(${theme.overlayImage})` : 'none')
   }, [theme])
 
+  useEffect(() => {
+    try { localStorage.setItem('baigong-posts', JSON.stringify(posts)) } catch { /* 存储空间不足时忽略 */ }
+  }, [posts])
+
+  useEffect(() => {
+    try { localStorage.setItem('baigong-comments', JSON.stringify(comments)) } catch { /* 存储空间不足时忽略 */ }
+  }, [comments])
+
+  useEffect(() => {
+    try { localStorage.setItem('baigong-warehouse', JSON.stringify(warehouse)) } catch { /* 存储空间不足时忽略 */ }
+  }, [warehouse])
+
   const navigate = useCallback((p: PageRoute) => {
     setPage(p)
   }, [])
@@ -115,9 +137,22 @@ function App() {
   }, [])
 
   const handleDeletePost = useCallback((postId: string) => {
+    const target = posts.find(p => p.id === postId)
+    target?.attachments?.forEach(a => {
+      deleteFile(a.id).catch(() => { /* 清理失败时忽略 */ })
+    })
     setPosts(prev => prev.filter(p => p.id !== postId))
     setComments(prev => prev.filter(c => c.postId !== postId))
     setCollections(prev => prev.filter(c => c.postId !== postId))
+  }, [posts])
+
+  const handleDeleteAttachment = useCallback((postId: string, fileId: string) => {
+    deleteFile(fileId).catch(() => { /* 清理失败时忽略 */ })
+    setPosts(prev => prev.map(p => (
+      p.id === postId
+        ? { ...p, attachments: (p.attachments || []).filter(a => a.id !== fileId) }
+        : p
+    )))
   }, [])
 
   const handleTogglePin = useCallback((postId: string) => {
@@ -317,8 +352,11 @@ function App() {
             currentUser={user}
             items={warehouse}
             users={users}
+            posts={posts}
             onAdd={handleAddWarehouse}
             onDelete={handleDeleteWarehouse}
+            onViewPost={navigateToPost}
+            onDeleteAttachment={handleDeleteAttachment}
           />
         )}
       </Layout>

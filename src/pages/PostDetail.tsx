@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { Post, Category, Comment, User } from '../types'
+import { downloadAttachment, formatFileSize } from '../fileStore'
 import {
   IconChevronLeft, IconMessage, IconEye, IconBookmark,
-  IconNewspaper, IconCode,
+  IconNewspaper, IconCode, IconPaperclip, IconDownload, IconFile,
 } from '../icons'
 import './PostDetail.css'
 import './PostList.css'
@@ -66,6 +67,29 @@ export default function PostDetail({
 
           <h1 className="post-detail-title">{post.title}</h1>
           <div className="post-detail-body">{post.content || post.summary}</div>
+
+          {post.attachments && post.attachments.length > 0 && (
+            <div className="post-attachments">
+              <div className="post-attachments-head">
+                <IconPaperclip />
+                <span>附件 {post.attachments.length} 个 · 已存入仓库</span>
+              </div>
+              {post.attachments.map(a => (
+                <div key={a.id} className="post-attachment-item">
+                  <span className="post-attachment-icon"><IconFile /></span>
+                  <span className="post-attachment-name">{a.name}</span>
+                  <span className="post-attachment-size">{formatFileSize(a.size)}</span>
+                  <button
+                    className="post-attachment-download"
+                    onClick={() => downloadAttachment(a.id, a.name)}
+                    aria-label={`下载 ${a.name}`}
+                  >
+                    <IconDownload /> 下载
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="post-detail-actions">
             <span

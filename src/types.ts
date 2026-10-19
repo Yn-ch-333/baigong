@@ -10,6 +10,13 @@ export interface User {
   password?: string
 }
 
+export interface Attachment {
+  id: string
+  name: string
+  size: number
+  type: string
+}
+
 export interface Post {
   id: string
   title: string
@@ -22,6 +29,7 @@ export interface Post {
   views: number
   comments?: number
   pinned?: boolean
+  attachments?: Attachment[]
 }
 
 export interface Category {

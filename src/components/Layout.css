@@ -315,6 +315,89 @@
   color: var(--fg);
 }
 
+.post-file-input {
+  display: none;
+}
+
+.post-file-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 0 12px;
+  height: 30px;
+  background: rgba(10, 10, 11, 0.8);
+  border: 1px dashed var(--green-line);
+  border-radius: 4px;
+  color: var(--brass);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+
+.post-file-add:hover {
+  border-color: var(--brass);
+  color: var(--brass-bright);
+}
+
+.post-file-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--fg-2);
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.post-file-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.post-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: rgba(10, 10, 11, 0.8);
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.post-file-name {
+  flex: 1;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-file-size {
+  color: var(--fg-2);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.post-file-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: var(--fg-2);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.post-file-remove:hover {
+  color: var(--red);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

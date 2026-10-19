@@ -52,6 +52,101 @@
   margin-bottom: 18px;
 }
 
+.warehouse-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.warehouse-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  color: var(--fg-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.warehouse-tab:hover {
+  color: var(--brass);
+  border-color: var(--brass-dim);
+}
+
+.warehouse-tab.active {
+  background: var(--green-soft);
+  border-color: var(--brass-dim);
+  color: var(--brass);
+}
+
+.warehouse-file-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.warehouse-file-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warehouse-file-cell svg {
+  flex-shrink: 0;
+  color: var(--fg-2);
+}
+
+.warehouse-post-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--brass);
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warehouse-post-link:hover {
+  color: var(--brass-bright);
+  text-decoration: underline;
+}
+
+.warehouse-file-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.warehouse-file-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  color: var(--brass);
+  cursor: pointer;
+}
+
+.warehouse-file-btn:hover {
+  color: var(--brass-bright);
+  border-color: var(--brass-dim);
+}
+
 .warehouse-stat {
   background: var(--bg-panel);
   border: 1px solid var(--green-line);

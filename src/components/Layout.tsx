@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { User, Category, Post, PageRoute, ThemeColors } from '../types'
+import type { User, Category, Post, PageRoute, ThemeColors, Attachment } from '../types'
+import { saveFile, formatFileSize } from '../fileStore'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
-  IconMail, IconUser, IconPlus, IconClose,
+  IconMail, IconUser, IconPlus, IconClose, IconPaperclip,
 } from '../icons'
 import './Layout.css'
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 interface LayoutProps {
   page: PageRoute
@@ -43,6 +46,9 @@ export default function Layout({
   const [isRegistering, setIsRegistering] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [postOpen, setPostOpen] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [fileError, setFileError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const idleTimerRef = useRef<number | null>(null)
   const pausedRef = useRef(false)
@@ -127,13 +133,44 @@ export default function Layout({
     setLoginOpen(false)
   }, [onRegisterUser, setUser, users])
 
-  const handlePost = useCallback((e: React.FormEvent) => {
+  const handlePickFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || [])
+    if (picked.length === 0) return
+    const oversize = picked.find(f => f.size > MAX_FILE_SIZE)
+    if (oversize) {
+      setFileError(`「${oversize.name}」超过 10MB，无法上传`)
+      e.target.value = ''
+      return
+    }
+    setFileError('')
+    setPendingFiles(prev => [...prev, ...picked])
+    e.target.value = ''
+  }, [])
+
+  const removePendingFile = useCallback((index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handlePost = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    const fd = new FormData(e.currentTarget as HTMLFormElement)
+    const form = e.currentTarget as HTMLFormElement
+    const fd = new FormData(form)
     const title = String(fd.get('title') || '')
     const summary = String(fd.get('summary') || '')
     const category = String(fd.get('category') || '技术问答')
     if (!title.trim()) return
+    const attachments: Attachment[] = []
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const f = pendingFiles[i]
+      const id = `f${Date.now()}_${i}`
+      try {
+        await saveFile(id, f)
+      } catch {
+        setFileError(`「${f.name}」保存失败，请重试`)
+        return
+      }
+      attachments.push({ id, name: f.name, size: f.size, type: f.type || 'application/octet-stream' })
+    }
     onPost({
       id: `p${Date.now()}`,
       title,
@@ -144,9 +181,12 @@ export default function Layout({
       date: new Date().toISOString().slice(0, 10).replace(/-/g, '.'),
       views: 0,
       comments: 0,
+      attachments: attachments.length > 0 ? attachments : undefined,
     })
+    setPendingFiles([])
+    setFileError('')
     setPostOpen(false)
-  }, [onPost, user])
+  }, [onPost, user, pendingFiles])
 
   return (
     <div className="app-shell">
@@ -288,11 +328,11 @@ export default function Layout({
       )}
 
       {postOpen && (
-        <div className="modal-overlay" onClick={() => setPostOpen(false)}>
+        <div className="modal-overlay" onClick={() => { setPostOpen(false); setPendingFiles([]); setFileError('') }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-head">
               <h3>发布帖子</h3>
-              <button className="modal-close" onClick={() => setPostOpen(false)} aria-label="关闭"><IconClose /></button>
+              <button className="modal-close" onClick={() => { setPostOpen(false); setPendingFiles([]); setFileError('') }} aria-label="关闭"><IconClose /></button>
             </div>
             <form onSubmit={handlePost}>
               <label className="field-label">
@@ -309,6 +349,40 @@ export default function Layout({
                 内容摘要
                 <textarea name="summary" className="field-input field-area" rows={4} placeholder="请输入内容摘要" required />
               </label>
+              <div className="field-label">
+                附件
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="post-file-input"
+                  onChange={handlePickFiles}
+                  aria-label="选择附件文件"
+                />
+                <button type="button" className="post-file-add" onClick={() => fileInputRef.current?.click()}>
+                  <IconPaperclip /> 添加附件
+                </button>
+                <span className="post-file-hint">单个文件不超过 10MB，附件将存入仓库</span>
+                {pendingFiles.length > 0 && (
+                  <div className="post-file-list">
+                    {pendingFiles.map((f, i) => (
+                      <div key={`${f.name}-${i}`} className="post-file-item">
+                        <span className="post-file-name">{f.name}</span>
+                        <span className="post-file-size">{formatFileSize(f.size)}</span>
+                        <button
+                          type="button"
+                          className="post-file-remove"
+                          onClick={() => removePendingFile(i)}
+                          aria-label={`移除 ${f.name}`}
+                        >
+                          <IconClose />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {fileError && <p className="login-error">{fileError}</p>}
+              </div>
               <button type="submit" className="btn-primary">发布</button>
             </form>
           </div>
