@@ -112,6 +112,20 @@
   white-space: nowrap;
 }
 
+.post-attachment-preview-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.post-attachment-preview-link:hover {
+  color: var(--brass-bright);
+  text-decoration: underline;
+}
+
 .post-attachment-size {
   color: var(--fg-2);
   font-size: 11px;

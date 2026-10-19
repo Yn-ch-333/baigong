@@ -83,3 +83,16 @@ export async function downloadAttachment(
   a.remove()
   URL.revokeObjectURL(url)
 }
+
+export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'none'
+
+const TEXT_EXT = /\.(txt|md|json|js|ts|tsx|jsx|css|html|xml|csv|log|yml|yaml|ini|conf?|sh|py|c|cpp|h|java|sql)$/i
+
+export function getPreviewKind(name: string, type: string): PreviewKind {
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('video/')) return 'video'
+  if (type.startsWith('audio/')) return 'audio'
+  if (type === 'application/pdf' || /\.pdf$/i.test(name)) return 'pdf'
+  if (type.startsWith('text/') || TEXT_EXT.test(name)) return 'text'
+  return 'none'
+}

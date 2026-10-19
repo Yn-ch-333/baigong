@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import type { User, WarehouseItem, Post } from '../types'
+import type { User, WarehouseItem, Post, Attachment } from '../types'
 import { downloadAttachment, formatFileSize } from '../fileStore'
+import FilePreview from '../components/FilePreview'
 import {
   IconWarehouse, IconFilter, IconPlus, IconClose,
-  IconFile, IconDownload,
+  IconFile, IconDownload, IconEye,
 } from '../icons'
 import './Warehouse.css'
 
@@ -53,6 +54,7 @@ export default function Warehouse({
   const [fileSearch, setFileSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [tab, setTab] = useState<'files' | 'items'>('files')
+  const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
 
   const allFiles = useMemo<FileRecord[]>(() => (
     posts.flatMap(p =>
@@ -208,6 +210,14 @@ export default function Warehouse({
                       <td>{f.date}</td>
                       <td>
                         <div className="warehouse-file-actions">
+                          <button
+                            className="warehouse-file-btn"
+                            onClick={() => setPreviewFile({ id: f.id, name: f.name, size: f.size, type: f.type })}
+                            aria-label={`预览 ${f.name}`}
+                            title="在线预览"
+                          >
+                            <IconEye />
+                          </button>
                           <button
                             className="warehouse-file-btn"
                             onClick={() => downloadAttachment(f.id, f.name)}
@@ -368,6 +378,10 @@ export default function Warehouse({
             </form>
           </div>
         </div>
+      )}
+
+      {previewFile && (
+        <FilePreview file={previewFile} onClose={() => setPreviewFile(null)} />
       )}
     </div>
   )

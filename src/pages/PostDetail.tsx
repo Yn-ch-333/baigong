@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import type { Post, Category, Comment, User } from '../types'
+import type { Post, Category, Comment, User, Attachment } from '../types'
 import { downloadAttachment, formatFileSize } from '../fileStore'
+import FilePreview from '../components/FilePreview'
 import {
   IconChevronLeft, IconMessage, IconEye, IconBookmark,
   IconNewspaper, IconCode, IconPaperclip, IconDownload, IconFile,
@@ -38,6 +39,7 @@ export default function PostDetail({
   onToggleCollect,
 }: PostDetailProps) {
   const [draft, setDraft] = useState('')
+  const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
 
   const pinnedPosts = useMemo(() => posts.filter(p => p.pinned).slice(0, 5), [posts])
 
@@ -77,8 +79,21 @@ export default function PostDetail({
               {post.attachments.map(a => (
                 <div key={a.id} className="post-attachment-item">
                   <span className="post-attachment-icon"><IconFile /></span>
-                  <span className="post-attachment-name">{a.name}</span>
+                  <button
+                    className="post-attachment-name post-attachment-preview-link"
+                    onClick={() => setPreviewFile(a)}
+                    title={`在线预览 ${a.name}`}
+                  >
+                    {a.name}
+                  </button>
                   <span className="post-attachment-size">{formatFileSize(a.size)}</span>
+                  <button
+                    className="post-attachment-download"
+                    onClick={() => setPreviewFile(a)}
+                    aria-label={`预览 ${a.name}`}
+                  >
+                    <IconEye /> 查看
+                  </button>
                   <button
                     className="post-attachment-download"
                     onClick={() => downloadAttachment(a.id, a.name)}
@@ -200,6 +215,10 @@ export default function PostDetail({
           </div>
         </section>
       </aside>
+
+      {previewFile && (
+        <FilePreview file={previewFile} onClose={() => setPreviewFile(null)} />
+      )}
     </div>
   )
 }

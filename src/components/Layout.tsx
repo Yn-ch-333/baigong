@@ -7,7 +7,7 @@ import {
 } from '../icons'
 import './Layout.css'
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+
 
 interface LayoutProps {
   page: PageRoute
@@ -136,12 +136,6 @@ export default function Layout({
   const handlePickFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files || [])
     if (picked.length === 0) return
-    const oversize = picked.find(f => f.size > MAX_FILE_SIZE)
-    if (oversize) {
-      setFileError(`「${oversize.name}」超过 10MB，无法上传`)
-      e.target.value = ''
-      return
-    }
     setFileError('')
     setPendingFiles(prev => [...prev, ...picked])
     e.target.value = ''
@@ -362,7 +356,7 @@ export default function Layout({
                 <button type="button" className="post-file-add" onClick={() => fileInputRef.current?.click()}>
                   <IconPaperclip /> 添加附件
                 </button>
-                <span className="post-file-hint">单个文件不超过 10MB，附件将存入仓库</span>
+                <span className="post-file-hint">不限文件大小，附件将存入仓库，支持在线预览</span>
                 {pendingFiles.length > 0 && (
                   <div className="post-file-list">
                     {pendingFiles.map((f, i) => (
