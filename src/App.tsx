@@ -10,17 +10,8 @@ import Messages from './pages/Messages'
 import Warehouse from './pages/Warehouse'
 import ThemeModal from './components/ThemeModal'
 import MusicPlayer from './components/MusicPlayer'
-import { deleteFile } from './fileStore'
+import * as api from './api'
 import type { User, Post, Category, Message, WarehouseItem, Comment, Collection, PageRoute, ThemeColors } from './types'
-import {
-  INITIAL_CATEGORIES,
-  INITIAL_POSTS,
-  INITIAL_USERS,
-  INITIAL_MESSAGES,
-  INITIAL_WAREHOUSE,
-  INITIAL_COMMENTS,
-  INITIAL_COLLECTIONS,
-} from './data'
 import defaultBgImage from './assets/theme-bg.jpg'
 import defaultOverlayImage from './assets/theme-overlay.png'
 
@@ -35,40 +26,17 @@ const DEFAULT_THEME: ThemeColors = {
   overlayImage: defaultOverlayImage,
 }
 
-function loadSaved<T>(key: string, fallback: T[]): T[] {
-  try {
-    const saved = localStorage.getItem(key)
-    return saved ? JSON.parse(saved) as T[] : fallback
-  } catch {
-    return fallback
-  }
-}
-
 function App() {
   const [entered, setEntered] = useState(false)
   const [page, setPage] = useState<PageRoute>('home')
   const [user, setUser] = useState<User | null>(null)
-  const [users, setUsers] = useState<User[]>(() => {
-    try {
-      const saved = localStorage.getItem('baigong-registered-users')
-      const registered: User[] = saved ? JSON.parse(saved) : []
-      const merged = [...INITIAL_USERS]
-      registered.forEach(u => {
-        if (!merged.find(existing => existing.id === u.id || existing.username === u.username)) {
-          merged.push(u)
-        }
-      })
-      return merged
-    } catch {
-      return INITIAL_USERS
-    }
-  })
-  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES)
-  const [posts, setPosts] = useState<Post[]>(() => loadSaved('baigong-posts', INITIAL_POSTS))
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
-  const [warehouse, setWarehouse] = useState<WarehouseItem[]>(() => loadSaved('baigong-warehouse', INITIAL_WAREHOUSE))
-  const [comments, setComments] = useState<Comment[]>(() => loadSaved('baigong-comments', INITIAL_COMMENTS))
-  const [collections, setCollections] = useState<Collection[]>(INITIAL_COLLECTIONS)
+  const [users, setUsers] = useState<User[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [posts, setPosts] = useState<Post[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
+  const [warehouse, setWarehouse] = useState<WarehouseItem[]>([])
+  const [comments, setComments] = useState<Comment[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
   const [selectedPostId, setSelectedPostId] = useState<string>('')
@@ -76,16 +44,27 @@ function App() {
   const [theme, setTheme] = useState<ThemeColors>(DEFAULT_THEME)
   const [themeOpen, setThemeOpen] = useState(false)
 
-  const handleRegisterUser = useCallback((newUser: User) => {
-    setUsers(prev => {
-      if (prev.find(u => u.username === newUser.username || u.id === newUser.id)) {
-        return prev
-      }
-      const next = [...prev, newUser]
-      const registered = next.filter(u => !INITIAL_USERS.find(init => init.id === u.id))
-      localStorage.setItem('baigong-registered-users', JSON.stringify(registered))
-      return next
+  useEffect(() => {
+    api.bootstrap().then(data => {
+      setUsers(data.users)
+      setCategories(data.categories)
+      setPosts(data.posts)
+      setComments(data.comments)
+      setWarehouse(data.warehouse)
+      setMessages(data.messages)
+      setCollections(data.collections)
+      if (data.me) setUser(data.me)
+    }).catch(err => {
+      console.error('加载启动数据失败', err)
     })
+  }, [])
+
+  const handleRegisterUser = useCallback((newUser: User) => {
+    setUsers(prev => (
+      prev.find(u => u.username === newUser.username || u.id === newUser.id)
+        ? prev
+        : [...prev, newUser]
+    ))
   }, [])
 
   useEffect(() => {
@@ -100,18 +79,6 @@ function App() {
     root.style.setProperty('--theme-bg-video', theme.bgVideo ? `url(${theme.bgVideo})` : 'none')
     root.style.setProperty('--theme-overlay-image', theme.overlayImage ? `url(${theme.overlayImage})` : 'none')
   }, [theme])
-
-  useEffect(() => {
-    try { localStorage.setItem('baigong-posts', JSON.stringify(posts)) } catch { /* 存储空间不足时忽略 */ }
-  }, [posts])
-
-  useEffect(() => {
-    try { localStorage.setItem('baigong-comments', JSON.stringify(comments)) } catch { /* 存储空间不足时忽略 */ }
-  }, [comments])
-
-  useEffect(() => {
-    try { localStorage.setItem('baigong-warehouse', JSON.stringify(warehouse)) } catch { /* 存储空间不足时忽略 */ }
-  }, [warehouse])
 
   const navigate = useCallback((p: PageRoute) => {
     setPage(p)
@@ -133,115 +100,114 @@ function App() {
   }, [])
 
   const handlePost = useCallback((p: Post) => {
-    setPosts(prev => [{ ...p, comments: 0 }, ...prev])
+    api.createPost({
+      title: p.title,
+      summary: p.summary,
+      category: p.category,
+      attachments: p.attachments,
+    }).then(({ post }) => {
+      setPosts(prev => [post, ...prev])
+    }).catch(err => console.error('发帖失败', err))
   }, [])
 
   const handleDeletePost = useCallback((postId: string) => {
-    const target = posts.find(p => p.id === postId)
-    target?.attachments?.forEach(a => {
-      deleteFile(a.id).catch(() => { /* 清理失败时忽略 */ })
-    })
-    setPosts(prev => prev.filter(p => p.id !== postId))
-    setComments(prev => prev.filter(c => c.postId !== postId))
-    setCollections(prev => prev.filter(c => c.postId !== postId))
-  }, [posts])
+    api.deletePost(postId).then(() => {
+      setPosts(prev => prev.filter(p => p.id !== postId))
+      setComments(prev => prev.filter(c => c.postId !== postId))
+      setCollections(prev => prev.filter(c => c.postId !== postId))
+    }).catch(err => console.error('删除帖子失败', err))
+  }, [])
 
   const handleDeleteAttachment = useCallback((postId: string, fileId: string) => {
-    deleteFile(fileId).catch(() => { /* 清理失败时忽略 */ })
-    setPosts(prev => prev.map(p => (
-      p.id === postId
-        ? { ...p, attachments: (p.attachments || []).filter(a => a.id !== fileId) }
-        : p
-    )))
+    api.deleteFile(fileId).then(() => {
+      setPosts(prev => prev.map(p => (
+        p.id === postId
+          ? { ...p, attachments: (p.attachments || []).filter(a => a.id !== fileId) }
+          : p
+      )))
+    }).catch(err => console.error('删除附件失败', err))
   }, [])
 
   const handleTogglePin = useCallback((postId: string) => {
-    setPosts(prev => prev.map(p => (p.id === postId ? { ...p, pinned: !p.pinned } : p)))
+    api.togglePin(postId).then(({ post }) => {
+      setPosts(prev => prev.map(p => (p.id === postId ? post : p)))
+    }).catch(err => console.error('置顶操作失败', err))
   }, [])
 
   const handleBanUser = useCallback((userId: string, banned: boolean) => {
-    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, banned } : u)))
+    api.banUser(userId, banned).then(() => {
+      setUsers(prev => prev.map(u => (u.id === userId ? { ...u, banned } : u)))
+    }).catch(err => console.error('封禁操作失败', err))
   }, [])
 
   const handleAddCategory = useCallback((name: string) => {
-    setCategories(prev => [...prev, { id: `c${Date.now()}`, name, count: 0 }])
+    api.addCategory(name).then(({ category }) => {
+      setCategories(prev => [...prev, category])
+    }).catch(err => console.error('新增板块失败', err))
   }, [])
 
   const handleDeleteCategory = useCallback((categoryId: string) => {
-    setCategories(prev => prev.filter(c => c.id !== categoryId))
+    api.deleteCategory(categoryId).then(() => {
+      setCategories(prev => prev.filter(c => c.id !== categoryId))
+    }).catch(err => console.error('删除板块失败', err))
   }, [])
 
   const handleSendMessage = useCallback((receiverId: string, content: string) => {
-    const receiver = users.find(u => u.id === receiverId)
-    const sender = user || { id: 'guest', name: '访客', avatar: '客' }
-    if (!receiver || !content.trim()) return
-    setMessages(prev => [
-      {
-        id: `m${Date.now()}`,
-        senderId: sender.id,
-        senderName: sender.name,
-        receiverId: receiver.id,
-        receiverName: receiver.name,
-        content: content.trim(),
-        date: new Date().toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        }).replace(/\//g, '.'),
-        read: true,
-      },
-      ...prev,
-    ])
-  }, [users, user])
+    if (!content.trim()) return
+    api.sendMessage(receiverId, content.trim()).then(({ message }) => {
+      setMessages(prev => [message, ...prev])
+    }).catch(err => console.error('发送私信失败', err))
+  }, [])
 
   const handleMarkRead = useCallback((messageId: string) => {
-    setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, read: true } : m)))
+    api.markMessageRead(messageId).then(() => {
+      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, read: true } : m)))
+    }).catch(err => console.error('标记已读失败', err))
   }, [])
 
   const handleAddWarehouse = useCallback((item: WarehouseItem) => {
-    setWarehouse(prev => [item, ...prev])
+    api.addWarehouseItem({
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unit,
+      location: item.location,
+    }).then(({ item: created }) => {
+      setWarehouse(prev => [created, ...prev])
+    }).catch(err => console.error('新增物料失败', err))
   }, [])
 
   const handleDeleteWarehouse = useCallback((itemId: string) => {
-    setWarehouse(prev => prev.filter(w => w.id !== itemId))
+    api.deleteWarehouseItem(itemId).then(() => {
+      setWarehouse(prev => prev.filter(w => w.id !== itemId))
+    }).catch(err => console.error('删除物料失败', err))
   }, [])
 
   const handleAddComment = useCallback((postId: string, content: string) => {
-    const author = user || { id: 'guest', name: '匿名', avatar: '匿' }
     const trimmed = content.trim()
     if (!trimmed) return
-    const date = new Date().toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).replace(/\//g, '.')
-    setComments(prev => [...prev, {
-      id: `cm${Date.now()}`,
-      postId,
-      author: author.name,
-      authorId: author.id,
-      content: trimmed,
-      date,
-    }])
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: (p.comments || 0) + 1 } : p))
-  }, [user])
+    api.addComment(postId, trimmed).then(({ comment }) => {
+      setComments(prev => [...prev, comment])
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: (p.comments || 0) + 1 } : p))
+    }).catch(err => console.error('发表评论失败', err))
+  }, [])
 
   const handleToggleCollection = useCallback((postId: string) => {
     if (!user) return
-    setCollections(prev => {
-      const idx = prev.findIndex(c => c.userId === user.id && c.postId === postId)
-      if (idx >= 0) {
-        const next = [...prev]
-        next.splice(idx, 1)
-        return next
-      }
-      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '.')
-      return [...prev, { id: `col${Date.now()}`, userId: user.id, postId, date }]
-    })
+    api.toggleCollect(postId).then(({ collected }) => {
+      setCollections(prev => {
+        const idx = prev.findIndex(c => c.userId === user.id && c.postId === postId)
+        if (!collected) {
+          if (idx < 0) return prev
+          const next = [...prev]
+          next.splice(idx, 1)
+          return next
+        }
+        if (idx >= 0) return prev
+        const date = new Date().toISOString().slice(0, 10).replace(/-/g, '.')
+        return [...prev, { id: `col${Date.now()}`, userId: user.id, postId, date }]
+      })
+    }).catch(err => console.error('收藏操作失败', err))
   }, [user])
 
   const openMessages = useCallback((targetUserId?: string) => {

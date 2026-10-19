@@ -1,0 +1,12 @@
+name = "baigong"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "baigong-db"
+database_id = "112567c2-aa63-452f-9a4c-8e193689d6c5"
+
+[[kv_namespaces]]
+binding = "FILES"
+id = "9c2af6c6fb3645ba9f2a497ba5d8c8ba"

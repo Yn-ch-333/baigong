@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { User, Category, Post, PageRoute, ThemeColors, Attachment } from '../types'
-import { saveFile, formatFileSize } from '../fileStore'
+import { formatFileSize } from '../fileStore'
+import * as api from '../api'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
   IconMail, IconUser, IconPlus, IconClose, IconPaperclip,
@@ -30,7 +31,6 @@ export default function Layout({
   page,
   user,
   setUser,
-  users,
   categories,
   onPost,
   children,
@@ -78,31 +78,29 @@ export default function Layout({
     }
   }, [])
 
-  const handleLogin = useCallback((e: React.FormEvent) => {
+  const handleLogin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget as HTMLFormElement)
     const username = String(fd.get('username') || '').trim()
     const password = String(fd.get('password') || '').trim()
-    const matched = users.find(
-      u => u.username === username && u.password === password
-    )
-    if (matched) {
-      setUser(matched)
+    try {
+      const { token, user: loggedIn } = await api.login(username, password)
+      api.setToken(token)
+      setUser(loggedIn)
       setLoginError('')
       setLoginOpen(false)
-    } else {
-      setLoginError('账号或密码错误')
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : '登录失败')
     }
-  }, [setUser, users])
+  }, [setUser])
 
-  const handleRegister = useCallback((e: React.FormEvent) => {
+  const handleRegister = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget as HTMLFormElement)
     const username = String(fd.get('username') || '').trim()
     const password = String(fd.get('password') || '').trim()
     const confirm = String(fd.get('confirmPassword') || '').trim()
     const name = String(fd.get('name') || '').trim()
-    const bio = String(fd.get('bio') || '').trim()
 
     if (!username || !password || !name) {
       setLoginError('请填写用户名、密码和昵称')
@@ -112,26 +110,24 @@ export default function Layout({
       setLoginError('两次输入的密码不一致')
       return
     }
-    if (users.some(u => u.username === username)) {
-      setLoginError('该用户名已被注册')
-      return
-    }
 
-    const newUser: User = {
-      id: `ur${Date.now()}`,
-      name,
-      avatar: name[0] || '工',
-      bio: bio || '新晋工程师',
-      role: 'user',
-      joinDate: new Date().toISOString().slice(0, 10).replace(/-/g, '.'),
-      username,
-      password,
+    try {
+      const { token, user: registered } = await api.register(username, password, name)
+      api.setToken(token)
+      onRegisterUser(registered)
+      setUser(registered)
+      setLoginError('')
+      setLoginOpen(false)
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : '注册失败')
     }
-    onRegisterUser(newUser)
-    setUser(newUser)
-    setLoginError('')
-    setLoginOpen(false)
-  }, [onRegisterUser, setUser, users])
+  }, [onRegisterUser, setUser])
+
+  const handleLogout = useCallback(() => {
+    api.logout().catch(() => { /* 忽略登出接口失败 */ })
+    api.clearToken()
+    setUser(null)
+  }, [setUser])
 
   const handlePickFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files || [])
@@ -156,17 +152,16 @@ export default function Layout({
     const attachments: Attachment[] = []
     for (let i = 0; i < pendingFiles.length; i++) {
       const f = pendingFiles[i]
-      const id = `f${Date.now()}_${i}`
       try {
-        await saveFile(id, f)
+        const uploaded = await api.uploadFile(f)
+        attachments.push(uploaded)
       } catch {
-        setFileError(`「${f.name}」保存失败，请重试`)
+        setFileError(`「${f.name}」上传失败，请重试`)
         return
       }
-      attachments.push({ id, name: f.name, size: f.size, type: f.type || 'application/octet-stream' })
     }
     onPost({
-      id: `p${Date.now()}`,
+      id: '',
       title,
       summary,
       category,
@@ -217,6 +212,16 @@ export default function Layout({
           </button>
           {user && (
             <span className="header-user" style={{ cursor: 'pointer' }} onClick={onProfile}>{user.name}</span>
+          )}
+          {user && (
+            <span
+              className="header-user"
+              style={{ cursor: 'pointer' }}
+              title="退出登录"
+              onClick={handleLogout}
+            >
+              退出
+            </span>
           )}
         </div>
       </header>
