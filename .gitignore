@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 .wrangler/
+.cf-token
+cf-token.txt

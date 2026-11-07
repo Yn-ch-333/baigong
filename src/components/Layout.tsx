@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { User, Category, Post, PageRoute, ThemeColors, Attachment } from '../types'
-import { formatFileSize } from '../fileStore'
+import { formatFileSize, avatarUrl } from '../fileStore'
 import * as api from '../api'
+import { COUNTRY_OPTIONS } from './WorldMap'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
   IconMail, IconUser, IconPlus, IconClose, IconPaperclip,
@@ -78,6 +79,12 @@ export default function Layout({
     }
   }, [])
 
+  const requestNotifyPermission = useCallback(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
+  }, [])
+
   const handleLogin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget as HTMLFormElement)
@@ -87,12 +94,13 @@ export default function Layout({
       const { token, user: loggedIn } = await api.login(username, password)
       api.setToken(token)
       setUser(loggedIn)
+      requestNotifyPermission()
       setLoginError('')
       setLoginOpen(false)
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : '登录失败')
     }
-  }, [setUser])
+  }, [setUser, requestNotifyPermission])
 
   const handleRegister = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -101,9 +109,14 @@ export default function Layout({
     const password = String(fd.get('password') || '').trim()
     const confirm = String(fd.get('confirmPassword') || '').trim()
     const name = String(fd.get('name') || '').trim()
+    const country = String(fd.get('country') || '').trim()
 
     if (!username || !password || !name) {
       setLoginError('请填写用户名、密码和昵称')
+      return
+    }
+    if (!country) {
+      setLoginError('请选择所在国家或地区')
       return
     }
     if (password !== confirm) {
@@ -112,16 +125,17 @@ export default function Layout({
     }
 
     try {
-      const { token, user: registered } = await api.register(username, password, name)
+      const { token, user: registered } = await api.register(username, password, name, country)
       api.setToken(token)
       onRegisterUser(registered)
       setUser(registered)
+      requestNotifyPermission()
       setLoginError('')
       setLoginOpen(false)
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : '注册失败')
     }
-  }, [onRegisterUser, setUser])
+  }, [onRegisterUser, setUser, requestNotifyPermission])
 
   const handleLogout = useCallback(() => {
     api.logout().catch(() => { /* 忽略登出接口失败 */ })
@@ -204,11 +218,13 @@ export default function Layout({
             <IconMail />
           </button>
           <button
-            className="icon-btn"
+            className="icon-btn profile-entry-btn"
             aria-label="个人信息入口"
             onClick={() => user ? onProfile() : setLoginOpen(true)}
           >
-            <IconUser />
+            {user && avatarUrl(user.avatar)
+              ? <img className="header-avatar-img" src={avatarUrl(user.avatar) as string} alt={user.name} />
+              : <IconUser />}
           </button>
           {user && (
             <span className="header-user" style={{ cursor: 'pointer' }} onClick={onProfile}>{user.name}</span>
@@ -301,6 +317,15 @@ export default function Layout({
                   <label className="field-label">
                     昵称
                     <input name="name" className="field-input" placeholder="显示昵称" required />
+                  </label>
+                  <label className="field-label">
+                    国家 / 地区
+                    <select name="country" className="field-input" defaultValue="" required>
+                      <option value="" disabled>选择你所在的国家或地区</option>
+                      {COUNTRY_OPTIONS.map(c => (
+                        <option key={c.id} value={c.id}>{c.flag} {c.name}</option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field-label">
                     个人简介

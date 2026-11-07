@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   bio TEXT,
   role TEXT DEFAULT 'user',
   banned INTEGER DEFAULT 0,
-  join_date TEXT
+  join_date TEXT,
+  country TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -40,7 +41,8 @@ CREATE TABLE IF NOT EXISTS comments (
   author_id TEXT,
   author TEXT,
   content TEXT,
-  date TEXT
+  date TEXT,
+  parent_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS warehouse (
@@ -64,7 +66,12 @@ CREATE TABLE IF NOT EXISTS messages (
   receiver_name TEXT,
   content TEXT,
   date TEXT,
-  read INTEGER DEFAULT 0
+  read INTEGER DEFAULT 0,
+  recalled INTEGER DEFAULT 0,
+  file_id TEXT,
+  file_name TEXT,
+  file_size INTEGER,
+  file_type TEXT
 );
 
 CREATE TABLE IF NOT EXISTS collections (

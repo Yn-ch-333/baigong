@@ -31,6 +31,21 @@
   background: var(--green-soft);
   border: 1px solid var(--green-line);
   color: var(--brass);
+  overflow: hidden;
+}
+
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-avatar-letter {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--brass);
+  user-select: none;
 }
 
 .profile-info {
@@ -107,6 +122,19 @@
   height: 14px;
 }
 
+.profile-meta-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.profile-meta-btn:hover {
+  color: var(--brass);
+}
+
 .profile-actions {
   flex: 0 0 auto;
   display: flex;
@@ -122,10 +150,18 @@
   gap: 6px;
   padding: 0 14px;
   border-radius: 4px;
+  border: 1px solid var(--green-line);
+  background: transparent;
+  color: var(--brass);
   font-size: 12px;
   cursor: pointer;
   transition: all 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
   white-space: nowrap;
+}
+
+.profile-btn:hover {
+  border-color: var(--brass-dim);
+  color: var(--brass-bright);
 }
 
 .profile-btn.primary {
@@ -199,6 +235,131 @@
 .collect-remove:hover {
   background: rgba(229, 57, 53, 0.12);
   border-color: var(--red);
+}
+
+/* ===== Edit profile modal ===== */
+.profile-edit-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.profile-edit-avatar {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-soft);
+  border: 1px solid var(--green-line);
+  color: var(--brass);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.profile-edit-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-edit-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-edit-avatar-actions .profile-btn {
+  height: 30px;
+}
+
+.profile-edit-hint {
+  color: var(--fg-3);
+  font-size: 11px;
+}
+
+/* ===== Collections modal ===== */
+.profile-collection-modal {
+  width: 560px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-collection-modal .modal-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-collection-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.profile-collection-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(10, 10, 11, 0.6);
+  border: 1px solid var(--green-line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.profile-collection-item:hover {
+  border-color: var(--brass-dim);
+  background: rgba(20, 48, 36, 0.3);
+}
+
+.profile-collection-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.profile-collection-title {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.profile-collection-summary {
+  color: var(--fg-2);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.profile-collection-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-collection-actions .profile-btn {
+  height: 26px;
+  padding: 0 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

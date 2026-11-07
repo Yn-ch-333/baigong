@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Layout from './components/Layout'
 import Entry from './pages/Entry'
 import Home from './pages/Home'
@@ -43,6 +43,87 @@ function App() {
   const [messageTargetId, setMessageTargetId] = useState<string>('')
   const [theme, setTheme] = useState<ThemeColors>(DEFAULT_THEME)
   const [themeOpen, setThemeOpen] = useState(false)
+  const [msgToast, setMsgToast] = useState('')
+  const messagesRef = useRef<Message[]>([])
+  const toastTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  const incomingText = (m: Message) => {
+    if (m.recalled) return '撤回了一条消息'
+    if (m.file) {
+      const kind = m.file.type.startsWith('image/')
+        ? '[图片]'
+        : m.file.type.startsWith('video/') ? '[视频]' : '[文件]'
+      return m.content ? `${kind} ${m.content}` : kind
+    }
+    return m.content
+  }
+
+  const notifyIncoming = useCallback((incoming: Message[]) => {
+    const last = incoming[incoming.length - 1]
+    const text = incoming.length > 1
+      ? `收到 ${incoming.length} 条新私信`
+      : `${last.senderName}：${incomingText(last)}`
+    setMsgToast(text)
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setMsgToast(''), 5000)
+    // 浏览器系统弹窗：电脑与手机浏览器都走同一套 Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification(`新私信 · ${last.senderName}`, {
+          body: incomingText(last),
+          tag: 'baigong-dm',
+        })
+        n.onclick = () => {
+          window.focus()
+          setPage('messages')
+          n.close()
+        }
+      } catch {
+        // 部分浏览器禁止页面直接构造通知，保留页面内提醒
+      }
+    }
+  }, [])
+
+  // 登录后轮询新私信并提醒（移动端/桌面端通用）
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    let busy = false
+    const poll = async () => {
+      if (busy) return
+      busy = true
+      try {
+        const { messages: list } = await api.fetchMessages()
+        if (cancelled) return
+        const known = new Set(messagesRef.current.map(m => m.id))
+        const incoming = list.filter(m =>
+          !known.has(m.id) && m.receiverId === user.id && !m.recalled
+        )
+        setMessages(list)
+        if (incoming.length > 0) notifyIncoming(incoming)
+      } catch {
+        // 轮询失败静默，等待下一次
+      } finally {
+        busy = false
+      }
+    }
+    poll()
+    const timer = window.setInterval(poll, 15000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [user, notifyIncoming])
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     api.bootstrap().then(data => {
@@ -152,11 +233,19 @@ function App() {
     }).catch(err => console.error('删除板块失败', err))
   }, [])
 
-  const handleSendMessage = useCallback((receiverId: string, content: string) => {
-    if (!content.trim()) return
-    api.sendMessage(receiverId, content.trim()).then(({ message }) => {
-      setMessages(prev => [message, ...prev])
+  const handleSendMessage = useCallback((receiverId: string, content: string, fileId?: string) => {
+    const trimmed = content.trim()
+    if (!trimmed && !fileId) return
+    api.sendMessage(receiverId, trimmed, fileId).then(({ message }) => {
+      setMessages(prev => [...prev, message])
     }).catch(err => console.error('发送私信失败', err))
+  }, [])
+
+  const handleRecallMessage = useCallback(async (messageId: string) => {
+    await api.recallMessage(messageId)
+    setMessages(prev => prev.map(m => (
+      m.id === messageId ? { ...m, recalled: true, content: '', file: undefined } : m
+    )))
   }, [])
 
   const handleMarkRead = useCallback((messageId: string) => {
@@ -183,13 +272,32 @@ function App() {
     }).catch(err => console.error('删除物料失败', err))
   }, [])
 
-  const handleAddComment = useCallback((postId: string, content: string) => {
+  const handleAddComment = useCallback((postId: string, content: string, parentId?: string) => {
     const trimmed = content.trim()
     if (!trimmed) return
-    api.addComment(postId, trimmed).then(({ comment }) => {
+    api.addComment(postId, trimmed, parentId).then(({ comment }) => {
       setComments(prev => [...prev, comment])
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: (p.comments || 0) + 1 } : p))
     }).catch(err => console.error('发表评论失败', err))
+  }, [])
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    const { postId, deletedIds } = await api.deleteComment(commentId)
+    const removed = new Set(deletedIds)
+    setComments(prev => prev.filter(c => !removed.has(c.id)))
+    setPosts(prev => prev.map(p => (
+      p.id === postId
+        ? { ...p, comments: Math.max(0, (p.comments || 0) - removed.size) }
+        : p
+    )))
+  }, [])
+
+  const handleUpdateProfile = useCallback(async (data: { name?: string; bio?: string; avatar?: string }) => {
+    const { user: updated } = await api.updateProfile(data)
+    setUser(updated)
+    setUsers(prev => prev.map(u => (u.id === updated.id ? updated : u)))
+    setPosts(prev => prev.map(p => (p.authorId === updated.id ? { ...p, author: updated.name } : p)))
+    setComments(prev => prev.map(c => (c.authorId === updated.id ? { ...c, author: updated.name } : c)))
   }, [])
 
   const handleToggleCollection = useCallback((postId: string) => {
@@ -242,6 +350,7 @@ function App() {
           <Home
             posts={posts}
             categories={categories}
+            users={users}
             onNavigate={navigate}
             onSelectCategory={setSelectedCategory}
             onViewProfile={navigateToProfile}
@@ -270,6 +379,7 @@ function App() {
             onViewProfile={navigateToProfile}
             onGoToPosts={goToPosts}
             onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
             onToggleCollect={handleToggleCollection}
           />
         )}
@@ -284,6 +394,7 @@ function App() {
             onSendMessage={openMessages}
             onViewPost={navigateToPost}
             onToggleCollection={handleToggleCollection}
+            onUpdateProfile={handleUpdateProfile}
             isAdmin={user?.role === 'admin'}
           />
         )}
@@ -311,6 +422,7 @@ function App() {
             initialTargetId={messageTargetId}
             onSend={handleSendMessage}
             onMarkRead={handleMarkRead}
+            onRecall={handleRecallMessage}
           />
         )}
         {page === 'warehouse' && (
@@ -326,6 +438,16 @@ function App() {
           />
         )}
       </Layout>
+      {msgToast && (
+        <button
+          className="msg-toast"
+          onClick={() => { setMsgToast(''); setPage('messages') }}
+          title="查看私信"
+        >
+          <span className="msg-toast-dot" />
+          <span className="msg-toast-text">{msgToast}</span>
+        </button>
+      )}
       {themeOpen && (
         <ThemeModal
           theme={theme}

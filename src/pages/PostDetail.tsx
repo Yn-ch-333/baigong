@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { Post, Category, Comment, User, Attachment } from '../types'
-import { downloadAttachment, formatFileSize } from '../fileStore'
+import { downloadAttachment, formatFileSize, fileUrl, getPreviewKind } from '../fileStore'
 import FilePreview from '../components/FilePreview'
 import {
   IconChevronLeft, IconMessage, IconEye, IconBookmark,
   IconNewspaper, IconCode, IconPaperclip, IconDownload, IconFile,
+  IconClose,
 } from '../icons'
 import './PostDetail.css'
 import './PostList.css'
@@ -21,7 +22,8 @@ interface PostDetailProps {
   onBack: () => void
   onViewProfile: (userId: string) => void
   onGoToPosts: (category?: string) => void
-  onAddComment: (postId: string, content: string) => void
+  onAddComment: (postId: string, content: string, parentId?: string) => void
+  onDeleteComment: (commentId: string) => Promise<void>
   onToggleCollect: (postId: string) => void
 }
 
@@ -36,18 +38,98 @@ export default function PostDetail({
   onViewProfile,
   onGoToPosts,
   onAddComment,
+  onDeleteComment,
   onToggleCollect,
 }: PostDetailProps) {
   const [draft, setDraft] = useState('')
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
+  const [replyTarget, setReplyTarget] = useState<Comment | null>(null)
 
   const pinnedPosts = useMemo(() => posts.filter(p => p.pinned).slice(0, 5), [posts])
+
+  const attachments = post.attachments || []
+  const imageAttachments = attachments.filter(a => getPreviewKind(a.name, a.type) === 'image')
+  const videoAttachments = attachments.filter(a => getPreviewKind(a.name, a.type) === 'video')
+  const fileAttachments = attachments.filter(a => {
+    const kind = getPreviewKind(a.name, a.type)
+    return kind !== 'image' && kind !== 'video'
+  })
+
+  const commentMap = useMemo(() => {
+    const m = new Map<string, Comment>()
+    comments.forEach(c => m.set(c.id, c))
+    return m
+  }, [comments])
+
+  const childrenMap = useMemo(() => {
+    const m = new Map<string, Comment[]>()
+    comments.forEach(c => {
+      if (c.parentId && commentMap.has(c.parentId)) {
+        const list = m.get(c.parentId) || []
+        list.push(c)
+        m.set(c.parentId, list)
+      }
+    })
+    return m
+  }, [comments, commentMap])
+
+  const rootComments = comments.filter(c => !c.parentId || !commentMap.has(c.parentId))
+
+  const handleDeleteComment = async (c: Comment) => {
+    if (!window.confirm('确定删除这条评论及其所有回复吗？')) return
+    const ids = new Set<string>()
+    const collect = (id: string) => {
+      ids.add(id)
+      ;(childrenMap.get(id) || []).forEach(ch => collect(ch.id))
+    }
+    collect(c.id)
+    if (replyTarget && ids.has(replyTarget.id)) setReplyTarget(null)
+    try {
+      await onDeleteComment(c.id)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '删除评论失败')
+    }
+  }
+
+  const renderComment = (c: Comment, depth: number) => {
+    const children = childrenMap.get(c.id) || []
+    const parentAuthor = c.parentId ? commentMap.get(c.parentId)?.author : undefined
+    return (
+      <div key={c.id} className={`post-comment ${depth > 0 ? 'is-reply' : ''}`}>
+        <div className="post-comment-head">
+          <span className="post-comment-avatar">{c.author.slice(0, 1)}</span>
+          <span className="post-comment-author-name">{c.author}</span>
+          {parentAuthor && <span className="post-comment-reply-to">回复 @{parentAuthor}</span>}
+          <span className="post-comment-date">{c.date}</span>
+          {currentUser && (
+            <button
+              className="post-comment-reply-btn"
+              onClick={() => setReplyTarget(c)}
+            >回复</button>
+          )}
+          {currentUser && (currentUser.role === 'admin' || c.authorId === currentUser.id) && (
+            <button
+              className="post-comment-delete-btn"
+              onClick={() => handleDeleteComment(c)}
+            >删除</button>
+          )}
+        </div>
+        <div className="post-comment-content">{c.content}</div>
+        {children.length > 0 && (
+          <div className="post-comment-replies">
+            {children.map(ch => renderComment(ch, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const handleComment = () => {
     const content = draft.trim()
     if (!content) return
-    onAddComment(post.id, content)
+    onAddComment(post.id, content, replyTarget?.id)
     setDraft('')
+    setReplyTarget(null)
   }
 
   return (
@@ -70,13 +152,45 @@ export default function PostDetail({
           <h1 className="post-detail-title">{post.title}</h1>
           <div className="post-detail-body">{post.content || post.summary}</div>
 
-          {post.attachments && post.attachments.length > 0 && (
+          {videoAttachments.length > 0 && (
+            <div className="post-media-block">
+              {videoAttachments.map(v => (
+                <video
+                  key={v.id}
+                  className="post-media-video"
+                  src={fileUrl(v.id)}
+                  controls
+                  preload="metadata"
+                  playsInline
+                />
+              ))}
+            </div>
+          )}
+
+          {imageAttachments.length > 0 && (
+            <div className="post-media-block">
+              <div className={`post-media-grid ${imageAttachments.length === 1 ? 'single' : ''}`}>
+                {imageAttachments.map(a => (
+                  <button
+                    key={a.id}
+                    className={`post-media-item ${imageAttachments.length === 1 ? 'single' : ''}`}
+                    onClick={() => setPreviewFile(a)}
+                    aria-label={`查看图片 ${a.name}`}
+                  >
+                    <img src={fileUrl(a.id)} alt={a.name} loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {fileAttachments.length > 0 && (
             <div className="post-attachments">
               <div className="post-attachments-head">
                 <IconPaperclip />
-                <span>附件 {post.attachments.length} 个 · 已存入仓库</span>
+                <span>附件 {fileAttachments.length} 个 · 已存入仓库</span>
               </div>
-              {post.attachments.map(a => (
+              {fileAttachments.map(a => (
                 <div key={a.id} className="post-attachment-item">
                   <span className="post-attachment-icon"><IconFile /></span>
                   <button
@@ -131,26 +245,29 @@ export default function PostDetail({
           </div>
 
           <div className="post-comment-list">
-            {comments.map(c => (
-              <div key={c.id} className="post-comment">
-                <div className="post-comment-author">
-                  {c.author}
-                  <span className="post-comment-date">{c.date}</span>
-                </div>
-                <div className="post-comment-content">{c.content}</div>
-              </div>
-            ))}
+            {rootComments.map(c => renderComment(c, 0))}
             {comments.length === 0 && (
               <div className="post-empty">暂无评论，来发表第一条吧</div>
             )}
           </div>
+
+          {replyTarget && (
+            <div className="post-comment-reply-banner">
+              <span>正在回复 <b>@{replyTarget.author}</b></span>
+              <button
+                className="post-comment-reply-cancel"
+                onClick={() => setReplyTarget(null)}
+                aria-label="取消回复"
+              ><IconClose /> 取消</button>
+            </div>
+          )}
 
           {currentUser ? (
             <div className="post-comment-input-bar">
               <input
                 type="text"
                 className="messages-input"
-                placeholder="发表评论…"
+                placeholder={replyTarget ? `回复 @${replyTarget.author}…` : '发表评论…'}
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleComment()}

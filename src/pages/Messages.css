@@ -324,3 +324,284 @@
   background: var(--green-line);
   color: var(--brass-bright);
 }
+
+/* ===== 头像图片 ===== */
+.messages-contact-avatar,
+.messages-chat-avatar {
+  overflow: hidden;
+}
+
+.messages-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ===== 小螺母：连续聊天标识 ===== */
+.messages-streak-mini {
+  display: inline-flex;
+  align-items: center;
+  color: var(--brass);
+  flex: 0 0 auto;
+  opacity: 0.95;
+}
+
+.messages-streak-mini svg {
+  width: 14px;
+  height: 14px;
+}
+
+.messages-streak-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--brass-dim);
+  border-radius: 11px;
+  background: rgba(201, 169, 97, 0.1);
+  color: var(--brass);
+  font-size: 11px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.messages-streak-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.messages-notify-btn {
+  margin-left: 8px;
+  height: 26px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--brass-dim);
+  border-radius: 4px;
+  color: var(--brass);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.messages-notify-btn:hover {
+  border-color: var(--brass);
+  background: rgba(201, 169, 97, 0.12);
+}
+
+/* ===== 撤回 ===== */
+.messages-bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.messages-recalled {
+  color: var(--fg-3);
+  font-style: italic;
+  border-style: dashed;
+  background: transparent;
+}
+
+.messages-recall-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--fg-3);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.messages-recall-btn:hover {
+  color: var(--red);
+}
+
+/* ===== 私信附件 ===== */
+.messages-bubble-content + .messages-bubble-meta,
+.messages-image-btn + .messages-bubble-meta,
+.messages-video + .messages-bubble-meta,
+.messages-file-card + .messages-bubble-meta {
+  margin-top: 4px;
+}
+
+.messages-image-btn {
+  padding: 0;
+  border: 1px solid var(--green-line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  cursor: zoom-in;
+  line-height: 0;
+  max-width: 240px;
+}
+
+.messages-image-btn img {
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  display: block;
+}
+
+.messages-video {
+  width: 240px;
+  max-height: 260px;
+  border: 1px solid var(--green-line);
+  border-radius: 8px;
+  background: #000;
+  display: block;
+}
+
+.messages-image-btn + .messages-bubble-content,
+.messages-video + .messages-bubble-content,
+.messages-file-card + .messages-bubble-content {
+  margin-top: 6px;
+}
+
+.messages-file-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--green-line);
+  border-radius: 8px;
+}
+
+.messages-file-card > svg {
+  flex: 0 0 auto;
+  color: var(--brass);
+}
+
+.messages-file-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.messages-file-name {
+  color: var(--fg);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-file-size {
+  color: var(--fg-3);
+  font-size: 10px;
+}
+
+.messages-file-action {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--green-line);
+  border-radius: 3px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+
+.messages-file-action:hover {
+  color: var(--brass);
+  border-color: var(--brass-dim);
+}
+
+.messages-file-input {
+  display: none;
+}
+
+/* ===== 输入区（含附件） ===== */
+.messages-composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--green-line);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.messages-composer .messages-input-bar {
+  border-top: none;
+  background: transparent;
+}
+
+.messages-attach-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--green-line);
+  border-radius: 4px;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.messages-attach-btn:hover:not(:disabled) {
+  color: var(--brass);
+  border-color: var(--brass-dim);
+}
+
+.messages-attach-btn:disabled,
+.messages-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.messages-pending-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 0;
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.messages-pending-name {
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.messages-pending-size {
+  color: var(--fg-3);
+  font-size: 11px;
+}
+
+.messages-pending-remove {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--green-line);
+  border-radius: 3px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+
+.messages-pending-remove:hover {
+  color: var(--red);
+  border-color: rgba(229, 57, 53, 0.45);
+}
+
+.messages-file-error {
+  padding: 6px 20px 0;
+  margin: 0;
+}

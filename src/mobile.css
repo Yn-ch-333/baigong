@@ -1,0 +1,426 @@
+/* ============================================================
+   移动端布局（仅在窄屏生效，桌面端样式完全不变）
+   ============================================================ */
+@media (max-width: 860px) {
+  :root {
+    --header-h: 52px;
+  }
+
+  .app-shell {
+    height: 100dvh;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  .app-header {
+    padding: 0 12px;
+  }
+
+  .brand-cn {
+    font-size: 19px;
+    letter-spacing: 2px;
+  }
+
+  .brand-de {
+    display: none;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .header-user {
+    margin-left: 4px;
+    font-size: 11px;
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---------- 主体：整页滚动 + 底部导航 ---------- */
+  .app-body {
+    display: block;
+    height: calc(100dvh - var(--header-h));
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 130;
+    width: 100%;
+    height: 56px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    gap: 12px;
+    border-right: none;
+    border-top: 1px solid var(--green-line);
+    background: rgba(0, 0, 0, 0.92);
+  }
+
+  .nav-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .nav-divider {
+    width: 1px;
+    height: 22px;
+    margin: 0 4px;
+  }
+
+  .app-main {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .content-row {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 76px;
+    gap: 12px;
+    min-height: auto;
+  }
+
+  .right-modules {
+    flex: none;
+    width: 100%;
+  }
+
+  .module-card {
+    flex: none;
+    max-height: 300px;
+  }
+
+  .fab {
+    right: 16px;
+    bottom: 72px;
+  }
+
+  /* ---------- 首页 ---------- */
+  .center-column {
+    min-height: auto;
+  }
+
+  .center-space {
+    flex: 0 0 auto;
+    height: 40vh;
+    min-height: 220px;
+  }
+
+  .map-strip {
+    height: 88px;
+  }
+
+  .slogan-bar {
+    padding-bottom: 4px;
+  }
+
+  .slogan-bar span {
+    font-size: 12px;
+    letter-spacing: 4px;
+  }
+
+  .map-modal {
+    max-width: 96vw;
+    max-height: 88vh;
+  }
+
+  .map-modal-img-wrap {
+    height: 160px;
+  }
+
+  .enterprise-item {
+    grid-template-columns: 56px 1fr;
+    row-gap: 4px;
+  }
+
+  /* ---------- 帖子列表 ---------- */
+  .post-center,
+  .post-detail-center,
+  .profile-center {
+    overflow: visible;
+  }
+
+  .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-chip {
+    flex: 0 0 auto;
+  }
+
+  .post-list {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .pagination {
+    padding-bottom: 4px;
+  }
+
+  /* ---------- 帖子详情 ---------- */
+  .post-detail-card {
+    padding: 14px;
+  }
+
+  .post-detail-title {
+    font-size: 16px;
+  }
+
+  .post-media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .post-media-item img {
+    height: 128px;
+  }
+
+  .post-media-video {
+    max-height: 320px;
+  }
+
+  .post-attachment-item {
+    flex-wrap: wrap;
+  }
+
+  .post-attachment-name {
+    flex: 1 1 100%;
+    order: 2;
+  }
+
+  .post-comments {
+    flex: 0 0 auto;
+    min-height: 340px;
+    max-height: 66dvh;
+    overflow: hidden;
+  }
+
+  .post-comment-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .post-comment {
+    padding: 12px 14px;
+  }
+
+  .post-comment-head .post-comment-date {
+    margin-left: 0;
+  }
+
+  .post-comment-reply-btn {
+    margin-left: auto;
+  }
+
+  .post-comment-input-bar {
+    height: 60px;
+    padding: 10px 14px;
+    position: static;
+  }
+
+  .post-comment-reply-banner {
+    padding: 8px 14px;
+    position: static;
+  }
+
+  /* ---------- 个人主页 ---------- */
+  .profile-card {
+    flex-wrap: wrap;
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .profile-avatar {
+    width: 56px;
+    height: 56px;
+  }
+
+  .profile-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .profile-actions .profile-btn {
+    flex: 1 1 auto;
+  }
+
+  .profile-meta {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .profile-post-list {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .profile-collection-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .profile-collection-actions {
+    flex-direction: row;
+  }
+
+  .profile-collection-actions .profile-btn,
+  .profile-collection-actions .collect-remove {
+    flex: 1 1 auto;
+    height: 28px;
+  }
+
+  /* ---------- 私信 ---------- */
+  .messages-row {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+  }
+
+  .messages-sidebar {
+    width: 100%;
+    flex: none;
+    max-height: 190px;
+    border-right: none;
+    border-bottom: 1px solid var(--green-line);
+  }
+
+  .messages-main {
+    min-height: 58vh;
+  }
+
+  .messages-chat-head {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .messages-chat-info {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .messages-chat-bio {
+    display: none;
+  }
+
+  .messages-streak-badge {
+    margin-left: 0;
+  }
+
+  .messages-notify-btn {
+    margin-left: 0;
+  }
+
+  .messages-bubble-list {
+    padding: 14px;
+  }
+
+  .messages-bubble {
+    max-width: 86%;
+  }
+
+  .messages-image-btn,
+  .messages-video {
+    max-width: 200px;
+  }
+
+  .messages-video {
+    width: 200px;
+  }
+
+  .messages-file-card {
+    max-width: 230px;
+  }
+
+  .messages-pending-file,
+  .messages-file-error {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .messages-input-bar {
+    padding: 10px 14px;
+  }
+
+  /* ---------- 仓库 / 管理 ---------- */
+  .admin-center,
+  .warehouse-center {
+    padding: 14px;
+  }
+
+  .admin-header-bar,
+  .warehouse-header-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .warehouse-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .warehouse-file-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .warehouse-tabs,
+  .admin-tabs {
+    flex-wrap: wrap;
+  }
+
+  .warehouse-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-add-bar {
+    flex-wrap: wrap;
+  }
+
+  .admin-card-actions {
+    flex-wrap: wrap;
+  }
+
+  /* ---------- 弹窗 / 文件预览 ---------- */
+  .modal {
+    width: calc(100vw - 28px);
+    max-width: 480px;
+    max-height: 88dvh;
+    overflow-y: auto;
+  }
+
+  .file-preview-overlay {
+    padding: 10px;
+  }
+
+  .file-preview-modal {
+    height: min(78dvh, 100%);
+  }
+}

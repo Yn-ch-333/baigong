@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Post, Category, PageRoute } from '../types'
+import type { Post, Category, PageRoute, User } from '../types'
 import {
   IconSearch, IconNewspaper, IconCode,
 } from '../icons'
@@ -10,13 +10,14 @@ import './Home.css'
 interface HomeProps {
   posts: Post[]
   categories: Category[]
+  users: User[]
   onNavigate: (page: PageRoute) => void
   onSelectCategory: (name: string) => void
   onViewProfile: (userId: string) => void
   onViewPost: (postId: string) => void
 }
 
-export default function Home({ posts, categories, onNavigate, onSelectCategory, onViewProfile, onViewPost }: HomeProps) {
+export default function Home({ posts, categories, users, onNavigate, onSelectCategory, onViewProfile, onViewPost }: HomeProps) {
   const [search, setSearch] = useState('')
   const [mapOpen, setMapOpen] = useState(false)
 
@@ -130,7 +131,7 @@ export default function Home({ posts, categories, onNavigate, onSelectCategory, 
       </aside>
 
       {mapOpen && (
-        <WorldMap onClose={() => setMapOpen(false)} />
+        <WorldMap onClose={() => setMapOpen(false)} users={users} />
       )}
     </div>
   )

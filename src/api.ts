@@ -53,10 +53,10 @@ export function login(username: string, password: string) {
   })
 }
 
-export function register(username: string, password: string, name: string) {
+export function register(username: string, password: string, name: string, country: string) {
   return request<{ token: string; user: User }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, password, name }),
+    body: JSON.stringify({ username, password, name, country }),
   })
 }
 
@@ -87,10 +87,23 @@ export function viewPost(id: string) {
   return request<{ views: number }>(`/posts/${id}/view`, { method: 'POST' })
 }
 
-export function addComment(postId: string, content: string) {
+export function addComment(postId: string, content: string, parentId?: string) {
   return request<{ comment: Comment }>(`/posts/${postId}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(parentId ? { content, parentId } : { content }),
+  })
+}
+
+export function deleteComment(commentId: string) {
+  return request<{ ok: true; postId: string; deletedIds: string[] }>(`/comments/${commentId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function updateProfile(data: { name?: string; bio?: string; avatar?: string; country?: string }) {
+  return request<{ user: User }>('/users/me', {
+    method: 'POST',
+    body: JSON.stringify(data),
   })
 }
 
@@ -127,11 +140,19 @@ export function deleteWarehouseItem(id: string) {
   return request<{ ok: true }>(`/warehouse/${id}`, { method: 'DELETE' })
 }
 
-export function sendMessage(receiverId: string, content: string) {
+export function sendMessage(receiverId: string, content: string, fileId?: string) {
   return request<{ message: Message }>('/messages', {
     method: 'POST',
-    body: JSON.stringify({ receiverId, content }),
+    body: JSON.stringify(fileId ? { receiverId, content, fileId } : { receiverId, content }),
   })
+}
+
+export function fetchMessages() {
+  return request<{ messages: Message[] }>('/messages')
+}
+
+export function recallMessage(id: string) {
+  return request<{ ok: true }>(`/messages/${id}`, { method: 'DELETE' })
 }
 
 export function markMessageRead(id: string) {

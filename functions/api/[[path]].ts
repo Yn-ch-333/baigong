@@ -90,6 +90,13 @@ function nowDateTime(): string {
   return `${d.getUTCFullYear()}.${pad(d.getUTCMonth() + 1)}.${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
 }
 
+// 把 "YYYY.MM.DD HH:mm"（北京时间）解析为毫秒时间戳
+function parseDateTimeMs(value: string): number {
+  const m = /^(\d{4})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2})$/.exec(value || '')
+  if (!m) return 0
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 8 * 3600e3
+}
+
 async function parseBody(req: Request): Promise<any> {
   try {
     return await req.json()
@@ -103,6 +110,18 @@ function getToken(req: Request): string {
   return auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
 }
 
+// 线上库结构自愈：确保 users.country 列存在（每个实例只尝试一次）
+let countryColumnReady = false
+async function ensureCountryColumn(env: Env): Promise<void> {
+  if (countryColumnReady) return
+  countryColumnReady = true
+  try {
+    await env.DB.prepare("ALTER TABLE users ADD COLUMN country TEXT DEFAULT ''").run()
+  } catch {
+    // 列已存在时 SQLite 会报 duplicate column name，忽略即可
+  }
+}
+
 interface UserRow {
   id: string
   username: string
@@ -113,13 +132,14 @@ interface UserRow {
   role: string | null
   banned: number | null
   join_date: string | null
+  country: string | null
 }
 
 async function getUser(req: Request, env: Env): Promise<UserRow | null> {
   const token = getToken(req)
   if (!token) return null
   const row = await env.DB.prepare(
-    'SELECT u.id, u.username, u.password, u.name, u.avatar, u.bio, u.role, u.banned, u.join_date ' +
+    'SELECT u.id, u.username, u.password, u.name, u.avatar, u.bio, u.role, u.banned, u.join_date, u.country ' +
       'FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?'
   )
     .bind(token)
@@ -155,6 +175,7 @@ function toUser(r: UserRow) {
     role: (r.role as 'admin' | 'user') || 'user',
     banned: !!r.banned,
     joinDate: r.join_date || '',
+    country: r.country || '',
   }
 }
 
@@ -186,6 +207,7 @@ function toComment(r: any) {
     authorId: r.author_id || undefined,
     content: r.content || '',
     date: r.date || '',
+    parentId: r.parent_id || undefined,
   }
 }
 
@@ -199,6 +221,10 @@ function toMessage(r: any) {
     content: r.content || '',
     date: r.date || '',
     read: !!r.read,
+    recalled: !!r.recalled,
+    file: r.file_id
+      ? { id: r.file_id, name: r.file_name || '文件', size: r.file_size || 0, type: r.file_type || '' }
+      : undefined,
   }
 }
 
@@ -235,15 +261,17 @@ async function register(req: Request, env: Env): Promise<Response> {
   const username = String(body.username || '').trim()
   const password = String(body.password || '')
   const name = String(body.name || '').trim()
+  const country = String(body.country || '').trim().slice(0, 32)
   if (!username || !password || !name) return err('用户名、密码和昵称不能为空', 400)
+  if (!country) return err('请选择所在国家或地区', 400)
   const exists = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first()
   if (exists) return err('用户名已存在', 409)
   const id = crypto.randomUUID()
   const pwd = await hashPassword(password)
   await env.DB.prepare(
-    'INSERT INTO users (id, username, password, name, avatar, bio, role, banned, join_date) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)'
+    'INSERT INTO users (id, username, password, name, avatar, bio, role, banned, join_date, country) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)'
   )
-    .bind(id, username, pwd, name, name.slice(0, 1), '', 'user', today())
+    .bind(id, username, pwd, name, name.slice(0, 1), '', 'user', today(), country)
     .run()
   const token = await createSession(env, id)
   const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>()
@@ -395,6 +423,13 @@ async function addComment(req: Request, env: Env, params: string[]): Promise<Res
   const body = await parseBody(req)
   const content = String(body.content || '').trim()
   if (!content) return err('评论内容不能为空', 400)
+  const parentId = String(body.parentId || '').trim() || null
+  if (parentId) {
+    const parent = await env.DB.prepare('SELECT id FROM comments WHERE id = ? AND post_id = ?')
+      .bind(parentId, postId)
+      .first()
+    if (!parent) return err('回复的评论不存在', 404)
+  }
   const comment = {
     id: crypto.randomUUID(),
     postId,
@@ -402,11 +437,38 @@ async function addComment(req: Request, env: Env, params: string[]): Promise<Res
     authorId: u.id,
     content,
     date: nowDateTime(),
+    parentId: parentId || undefined,
   }
-  await env.DB.prepare('INSERT INTO comments (id, post_id, author_id, author, content, date) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(comment.id, postId, u.id, u.name, content, comment.date)
+  await env.DB.prepare(
+    'INSERT INTO comments (id, post_id, author_id, author, content, date, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind(comment.id, postId, u.id, u.name, content, comment.date, parentId || '')
     .run()
   return json({ comment })
+}
+
+// 删除评论：作者本人或管理员，连带删除其下所有回复
+async function deleteComment(req: Request, env: Env, params: string[]): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const id = params[0]
+  const row = await env.DB.prepare('SELECT id, post_id, author_id FROM comments WHERE id = ?').bind(id).first<any>()
+  if (!row) return err('评论不存在', 404)
+  if (row.author_id !== u.id && u.role !== 'admin') return err('无权删除该评论', 403)
+  const tree = await env.DB.prepare(
+    'WITH RECURSIVE sub(id) AS (' +
+      'SELECT id FROM comments WHERE id = ? ' +
+      'UNION ALL SELECT c.id FROM comments c JOIN sub s ON c.parent_id = s.id' +
+    ') SELECT id FROM sub'
+  )
+    .bind(id)
+    .all<{ id: string }>()
+  const ids = (tree.results || []).map(r => r.id)
+  if (ids.length === 0) return err('评论不存在', 404)
+  await env.DB.prepare(`DELETE FROM comments WHERE id IN (${ids.map(() => '?').join(',')})`)
+    .bind(...ids)
+    .run()
+  return json({ ok: true, postId: row.post_id, deletedIds: ids })
 }
 
 async function collectPost(req: Request, env: Env, params: string[]): Promise<Response> {
@@ -460,6 +522,40 @@ async function banUser(req: Request, env: Env, params: string[]): Promise<Respon
   return json({ ok: true })
 }
 
+// 修改自己的资料：昵称、简介、头像（头像存文件 id，格式 file:<id>）
+async function updateMe(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const body = await parseBody(req)
+  const name = body.name !== undefined ? String(body.name).trim() : u.name
+  if (!name) return err('昵称不能为空', 400)
+  if (name.length > 24) return err('昵称最多 24 个字符', 400)
+  const bio = body.bio !== undefined ? String(body.bio).trim() : (u.bio || '')
+  if (bio.length > 120) return err('个人简介最多 120 个字符', 400)
+  const avatar = body.avatar !== undefined ? String(body.avatar).trim() : (u.avatar || '')
+  const country = body.country !== undefined ? String(body.country).trim().slice(0, 32) : (u.country || '')
+  if (avatar.startsWith('file:')) {
+    const fileId = avatar.slice(5)
+    const meta = await env.DB.prepare('SELECT id FROM files WHERE id = ?').bind(fileId).first()
+    if (!meta) return err('头像文件不存在，请重新上传', 400)
+  }
+  await env.DB.prepare('UPDATE users SET name = ?, bio = ?, avatar = ?, country = ? WHERE id = ?')
+    .bind(name, bio, avatar, country, u.id)
+    .run()
+  // 昵称变更后同步所有冗余展示字段
+  if (name !== u.name) {
+    await env.DB.batch([
+      env.DB.prepare('UPDATE posts SET author = ? WHERE author_id = ?').bind(name, u.id),
+      env.DB.prepare('UPDATE comments SET author = ? WHERE author_id = ?').bind(name, u.id),
+      env.DB.prepare('UPDATE warehouse SET owner_name = ? WHERE owner_id = ?').bind(name, u.id),
+      env.DB.prepare('UPDATE messages SET sender_name = ? WHERE sender_id = ?').bind(name, u.id),
+      env.DB.prepare('UPDATE messages SET receiver_name = ? WHERE receiver_id = ?').bind(name, u.id),
+    ])
+  }
+  const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(u.id).first<UserRow>()
+  return json({ user: toUser(row as UserRow) })
+}
+
 // ---------- 仓库物料 ----------
 async function createWarehouseItem(req: Request, env: Env): Promise<Response> {
   const u = await requireUser(req, env)
@@ -511,15 +607,35 @@ async function deleteWarehouseItem(req: Request, env: Env, params: string[]): Pr
 }
 
 // ---------- 私信 ----------
+async function listMessages(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const msgs = await env.DB.prepare(
+    'SELECT * FROM messages WHERE sender_id = ? OR receiver_id = ? ORDER BY date ASC'
+  )
+    .bind(u.id, u.id)
+    .all<any>()
+  return json({ messages: (msgs.results || []).map(toMessage) })
+}
+
 async function sendMessage(req: Request, env: Env): Promise<Response> {
   const u = await requireUser(req, env)
   if (u instanceof Response) return u
   const body = await parseBody(req)
   const receiverId = String(body.receiverId || '').trim()
   const content = String(body.content || '').trim()
-  if (!content) return err('私信内容不能为空', 400)
+  const fileId = String(body.fileId || '').trim()
+  if (!content && !fileId) return err('私信内容不能为空', 400)
   const receiver = await env.DB.prepare('SELECT id, name FROM users WHERE id = ?').bind(receiverId).first<{ id: string; name: string }>()
   if (!receiver) return err('接收人不存在', 404)
+  let file: any = null
+  if (fileId) {
+    file = await env.DB.prepare('SELECT id, name, size, type, uploader_id FROM files WHERE id = ?')
+      .bind(fileId)
+      .first<any>()
+    if (!file) return err('附件不存在，请重新上传', 400)
+    if (file.uploader_id !== u.id) return err('无权使用该附件', 403)
+  }
   const message = {
     id: crypto.randomUUID(),
     senderId: u.id,
@@ -529,13 +645,38 @@ async function sendMessage(req: Request, env: Env): Promise<Response> {
     content,
     date: nowDateTime(),
     read: false,
+    recalled: false,
+    file: file
+      ? { id: file.id, name: file.name || '文件', size: file.size || 0, type: file.type || '' }
+      : undefined,
   }
   await env.DB.prepare(
-    'INSERT INTO messages (id, sender_id, sender_name, receiver_id, receiver_name, content, date, read) VALUES (?, ?, ?, ?, ?, ?, ?, 0)'
+    'INSERT INTO messages (id, sender_id, sender_name, receiver_id, receiver_name, content, date, read, recalled, file_id, file_name, file_size, file_type) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)'
   )
-    .bind(message.id, u.id, u.name, receiver.id, receiver.name, content, message.date)
+    .bind(
+      message.id, u.id, u.name, receiver.id, receiver.name, content, message.date,
+      file ? file.id : null, file ? file.name : null, file ? file.size : null, file ? file.type : null
+    )
     .run()
   return json({ message })
+}
+
+// 撤回自己的私信：仅发送后 3 分钟内可撤回，保留占位，正文与附件不再展示
+async function recallMessage(req: Request, env: Env, params: string[]): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const row = await env.DB.prepare('SELECT id, sender_id, date FROM messages WHERE id = ?').bind(params[0]).first<any>()
+  if (!row) return err('消息不存在', 404)
+  if (row.sender_id !== u.id) return err('只能撤回自己发送的消息', 403)
+  const sentAt = parseDateTimeMs(row.date)
+  if (!sentAt || Date.now() - sentAt > 3 * 60 * 1000) return err('发送超过 3 分钟的消息不能撤回', 400)
+  await env.DB.prepare(
+    'UPDATE messages SET recalled = 1, content = \'\', file_id = NULL, file_name = NULL, file_size = NULL, file_type = NULL WHERE id = ?'
+  )
+    .bind(row.id)
+    .run()
+  return json({ ok: true })
 }
 
 async function markMessageRead(req: Request, env: Env, params: string[]): Promise<Response> {
@@ -612,13 +753,17 @@ const routes: Array<[string, string, Handler]> = [
   ['POST', 'posts/*/pin', (req, env, p) => pinPost(req, env, p)],
   ['POST', 'posts/*/view', (req, env, p) => viewPost(req, env, p)],
   ['POST', 'posts/*/comments', (req, env, p) => addComment(req, env, p)],
+  ['DELETE', 'comments/*', (req, env, p) => deleteComment(req, env, p)],
   ['POST', 'posts/*/collect', (req, env, p) => collectPost(req, env, p)],
   ['POST', 'categories', (req, env) => createCategory(req, env)],
   ['DELETE', 'categories/*', (req, env, p) => deleteCategory(req, env, p)],
+  ['POST', 'users/me', (req, env) => updateMe(req, env)],
   ['POST', 'users/*/ban', (req, env, p) => banUser(req, env, p)],
   ['POST', 'warehouse', (req, env) => createWarehouseItem(req, env)],
   ['DELETE', 'warehouse/*', (req, env, p) => deleteWarehouseItem(req, env, p)],
+  ['GET', 'messages', (req, env) => listMessages(req, env)],
   ['POST', 'messages', (req, env) => sendMessage(req, env)],
+  ['DELETE', 'messages/*', (req, env, p) => recallMessage(req, env, p)],
   ['POST', 'messages/*/read', (req, env, p) => markMessageRead(req, env, p)],
   ['POST', 'files', (req, env) => uploadFile(req, env)],
   ['GET', 'files/*', (req, env, p, url) => getFile(req, env, p, url)],
@@ -631,6 +776,7 @@ export async function onRequest(ctx: EventContext): Promise<Response> {
     const url = new URL(request.url)
     const seg = url.pathname.split('/').filter(Boolean)
     if (seg[0] !== 'api') return err('接口不存在', 404)
+    await ensureCountryColumn(env)
     const path = seg.slice(1)
     const method = request.method.toUpperCase()
 

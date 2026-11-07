@@ -5,6 +5,22 @@ export async function getFile(id: string): Promise<Blob | null> {
   return res.blob()
 }
 
+export function fileUrl(id: string): string {
+  return `/api/files/${id}`
+}
+
+// 头像可能是单个字符（默认首字），也可能是 file:<id>（上传的图片）
+export function avatarUrl(avatar?: string): string | null {
+  if (!avatar) return null
+  if (avatar.startsWith('file:')) return fileUrl(avatar.slice(5))
+  return null
+}
+
+export function avatarInitial(avatar?: string, name?: string): string {
+  if (avatar && !avatar.startsWith('file:')) return avatar.slice(0, 1)
+  return (name || '').slice(0, 1)
+}
+
 export function downloadAttachment(id: string, name: string): void {
   const a = document.createElement('a')
   a.href = `/api/files/${id}?download=1`

@@ -8,6 +8,8 @@ export interface User {
   joinDate?: string
   username?: string
   password?: string
+  /** 所在国家/地区 id，与世界地图国家节点一致 */
+  country?: string
 }
 
 export interface Attachment {
@@ -45,6 +47,7 @@ export interface Comment {
   authorId?: string
   content: string
   date: string
+  parentId?: string
 }
 
 export interface Message {
@@ -56,6 +59,8 @@ export interface Message {
   content: string
   date: string
   read?: boolean
+  recalled?: boolean
+  file?: Attachment
 }
 
 export interface WarehouseItem {

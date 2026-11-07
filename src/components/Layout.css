@@ -93,6 +93,19 @@
   font-size: 12px;
 }
 
+.profile-entry-btn {
+  padding: 0;
+  overflow: hidden;
+}
+
+.header-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
+}
+
 /* ===== Body ===== */
 .app-body {
   display: flex;
@@ -258,6 +271,15 @@
 
 .field-input:focus {
   border-color: var(--brass);
+}
+
+select.field-input {
+  cursor: pointer;
+}
+
+select.field-input option {
+  background: #0d1310;
+  color: var(--fg);
 }
 
 .field-area {
