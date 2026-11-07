@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { User } from '../types'
 import { IconClose } from '../icons'
 import { WORLD_COUNTRY_PATHS } from '../data/worldMapPaths'
+import GlobeCanvas from './GlobeCanvas'
 import './WorldMap.css'
 
 /* ------------------------------------------------------------------ */
@@ -43,13 +44,6 @@ interface WorldMapProps {
   /** 全部注册用户，用于统计各国注册人数 */
   users?: User[]
 }
-
-/* ------------------------------------------------------------------ */
-/*  Projection helpers (equirectangular, viewBox 0 0 1000 500)        */
-/* ------------------------------------------------------------------ */
-
-const px = (lon: number) => Math.round(((lon + 180) / 360) * 1000)
-const py = (lat: number) => Math.round(((90 - lat) / 180) * 500)
 
 /* ------------------------------------------------------------------ */
 /*  Category styling metadata                                         */
@@ -98,6 +92,41 @@ const LINKS: [string, string][] = [
   ['ae', 'il'],
   ['jp', 'kr'],
   ['kr', 'sg'],
+  /* 扩充后补充的全球连线 */
+  ['cn', 'vn'],
+  ['cn', 'th'],
+  ['cn', 'id'],
+  ['cn', 'my'],
+  ['cn', 'ru'],
+  ['cn', 'kz'],
+  ['cn', 'sa'],
+  ['cn', 'za'],
+  ['cn', 'br'],
+  ['us', 'jp'],
+  ['us', 'de'],
+  ['us', 'in'],
+  ['us', 'au'],
+  ['us', 'kr'],
+  ['de', 'pl'],
+  ['de', 'cz'],
+  ['de', 'at'],
+  ['de', 'dk'],
+  ['fr', 'be'],
+  ['uk', 'ie'],
+  ['es', 'pt'],
+  ['it', 'gr'],
+  ['ru', 'by'],
+  ['ru', 'kz'],
+  ['in', 'bd'],
+  ['in', 'lk'],
+  ['in', 'np'],
+  ['ir', 'tr'],
+  ['tr', 'ge'],
+  ['eg', 'za'],
+  ['br', 'ar'],
+  ['br', 'cl'],
+  ['mx', 'co'],
+  ['mx', 'pe'],
 ]
 
 /* ------------------------------------------------------------------ */
@@ -791,14 +820,797 @@ const COUNTRIES: Country[] = [
       { name: 'Petroperú', nameEn: 'Petroperú', category: '电气', desc: '秘鲁国家石油公司，炼化与管道运输，Talara炼厂现代化改造。', website: 'https://www.petroperu.com.pe' },
     ],
   },
+  /* ---------- 欧洲（扩充） ---------- */
+  {
+    id: 'rs', mapName: 'Serbia', name: '塞尔维亚', nameEn: 'Serbia', flag: '🇷🇸',
+    lat: 44.0, lon: 20.9,
+    enterprises: [
+      { name: '塞尔维亚电力', nameEn: 'EPS', category: '电气', desc: '塞尔维亚国家电力公司，燃煤与水电装机覆盖全国，主导电网调度与供电。', website: 'https://www.eps.rs' },
+      { name: '扎斯塔瓦武器', nameEn: 'Zastava Arms', category: '机械', desc: '塞尔维亚老牌军工机械企业，枪械与精密机械制造，产品出口多国。', website: 'https://www.zastava-arms.rs' },
+      { name: '塞尔维亚电信', nameEn: 'Telekom Srbija', category: '计算机', desc: '塞尔维亚最大电信运营商，移动、宽带与数据中心业务覆盖巴尔干。', website: 'https://www.telekom.rs' },
+    ],
+  },
+  {
+    id: 'hr', mapName: 'Croatia', name: '克罗地亚', nameEn: 'Croatia', flag: '🇭🇷',
+    lat: 45.3, lon: 15.9,
+    enterprises: [
+      { name: 'Rimac', nameEn: 'Rimac Automobili', category: '汽车', desc: '电动超跑与高性能电驱系统制造商，与保时捷合资运营布加迪 Rimac。', website: 'https://www.rimac-automobili.com' },
+      { name: '康查尔', nameEn: 'Končar', category: '电气', desc: '克罗地亚电气装备集团，变压器、牵引电机与可再生能源并网设备。', website: 'https://www.koncar.hr' },
+      { name: 'Infobip', nameEn: 'Infobip', category: '计算机', desc: '全球通信平台服务商，短信、邮件与全渠道客户互动 API 覆盖 190 多国。', website: 'https://www.infobip.com' },
+    ],
+  },
+  {
+    id: 'sk', mapName: 'Slovakia', name: '斯洛伐克', nameEn: 'Slovakia', flag: '🇸🇰',
+    lat: 48.7, lon: 19.5,
+    enterprises: [
+      { name: '大众斯洛伐克', nameEn: 'Volkswagen Slovakia', category: '汽车', desc: '大众集团布拉迪斯拉发工厂，生产途锐、Q7 等高端 SUV 与保时捷车身。', website: 'https://www.volkswagen.sk' },
+      { name: '起亚斯洛伐克', nameEn: 'Kia Slovakia', category: '汽车', desc: '起亚日利纳工厂，生产 Sportage 等车型，是斯洛伐克汽车出口主力。', website: 'https://www.kia.sk' },
+      { name: 'ESET', nameEn: 'ESET', category: '计算机', desc: '斯洛伐克网络安全企业，端点防护与威胁情报产品服务全球企业与个人。', website: 'https://www.eset.com' },
+    ],
+  },
+  {
+    id: 'si', mapName: 'Slovenia', name: '斯洛文尼亚', nameEn: 'Slovenia', flag: '🇸🇮',
+    lat: 46.1, lon: 14.8, hideLabel: true,
+    enterprises: [
+      { name: 'Revoz', nameEn: 'Revoz', category: '汽车', desc: '雷诺斯洛文尼亚工厂，生产 Clio 等小型车，是当地最大出口企业之一。', website: 'https://www.revoz.si' },
+      { name: 'Gorenje', nameEn: 'Gorenje', category: '电气', desc: '斯洛文尼亚家电集团（海信控股），白电产品销往欧洲与全球市场。', website: 'https://www.gorenje.com' },
+      { name: 'Trimo', nameEn: 'Trimo', category: '机械', desc: '钢结构建筑围护系统制造商，夹芯板与模块化建筑技术出口 50 多国。', website: 'https://www.trimo-group.com' },
+    ],
+  },
+  {
+    id: 'bg', mapName: 'Bulgaria', name: '保加利亚', nameEn: 'Bulgaria', flag: '🇧🇬',
+    lat: 42.7, lon: 25.4,
+    enterprises: [
+      { name: 'Telerik', nameEn: 'Telerik', category: '计算机', desc: '保加利亚软件企业，.NET 控件与企业级开发工具被 Progress 收购后仍为研发重镇。', website: 'https://www.telerik.com' },
+      { name: 'Arsenal', nameEn: 'Arsenal AD', category: '机械', desc: '保加利亚机械与军工制造企业，精密加工与特种装备生产历史悠久。', website: 'https://www.arsenal-bg.com' },
+      { name: 'Vivacom', nameEn: 'Vivacom', category: '计算机', desc: '保加利亚电信运营商，移动、固网与 ICT 集成服务覆盖全国。', website: 'https://www.vivacom.bg' },
+    ],
+  },
+  {
+    id: 'lt', mapName: 'Lithuania', name: '立陶宛', nameEn: 'Lithuania', flag: '🇱🇹',
+    lat: 55.2, lon: 23.9,
+    enterprises: [
+      { name: 'Teltonika', nameEn: 'Teltonika Networks', category: '电气', desc: '立陶宛物联网设备制造商，工业路由器与车载远程信息终端全球出货。', website: 'https://teltonika-networks.com' },
+      { name: 'Ignitis', nameEn: 'Ignitis Group', category: '电气', desc: '立陶宛国有能源集团，发电、配电与可再生能源项目覆盖波罗的海。', website: 'https://www.ignitisgrupe.lt' },
+      { name: '立陶宛铁路', nameEn: 'LTG', category: '机械', desc: '立陶宛国家铁路集团，货运与客运网络连接波罗的海与欧洲内陆。', website: 'https://www.litrail.lt' },
+    ],
+  },
+  {
+    id: 'lv', mapName: 'Latvia', name: '拉脱维亚', nameEn: 'Latvia', flag: '🇱🇻',
+    lat: 56.9, lon: 24.6,
+    enterprises: [
+      { name: 'MikroTik', nameEn: 'MikroTik', category: '计算机', desc: '拉脱维亚网络设备厂商，RouterOS 与低成本路由器广泛应用于全球 ISP。', website: 'https://mikrotik.com' },
+      { name: '拉脱维亚电力', nameEn: 'Latvenergo', category: '电气', desc: '拉脱维亚国有电力集团，水电、热电与售电业务覆盖全国。', website: 'https://www.latvenergo.lv' },
+      { name: '拉脱维亚铁路', nameEn: 'Latvijas dzelzceļš', category: '机械', desc: '拉脱维亚国家铁路公司，承担波罗的海货运枢纽与过境物流。', website: 'https://www.ldz.lv' },
+    ],
+  },
+  {
+    id: 'ee', mapName: 'Estonia', name: '爱沙尼亚', nameEn: 'Estonia', flag: '🇪🇪',
+    lat: 58.6, lon: 25.0,
+    enterprises: [
+      { name: 'Bolt', nameEn: 'Bolt', category: '计算机', desc: '爱沙尼亚出行平台，网约车、电动滑板车与外卖业务覆盖欧洲与非洲多城。', website: 'https://bolt.eu' },
+      { name: 'Wise', nameEn: 'Wise', category: '计算机', desc: '爱沙尼亚创立的跨境支付平台，多币种账户与低成本汇款服务全球用户。', website: 'https://wise.com' },
+      { name: '爱沙尼亚能源', nameEn: 'Eesti Energia', category: '电气', desc: '爱沙尼亚国有能源集团，油页岩发电与再生能源转型并行推进。', website: 'https://www.energia.ee' },
+    ],
+  },
+  {
+    id: 'is', mapName: 'Iceland', name: '冰岛', nameEn: 'Iceland', flag: '🇮🇸',
+    lat: 64.9, lon: -19.0,
+    enterprises: [
+      { name: 'Landsvirkjun', nameEn: 'Landsvirkjun', category: '电气', desc: '冰岛国家电力公司，地热与水电站为数据中心与铝冶炼提供低碳电力。', website: 'https://www.landsvirkjun.com' },
+      { name: 'Alcoa Fjarðaál', nameEn: 'Alcoa Fjarðaál', category: '机械', desc: '冰岛东部的铝冶炼厂，利用地热电力生产低碳铝，供应欧洲工业市场。', website: 'https://www.alcoa.com' },
+      { name: 'CCP Games', nameEn: 'CCP Games', category: '计算机', desc: '冰岛游戏开发商，EVE Online 大型太空沙盒运营二十余年，绑定工业经济系统。', website: 'https://www.ccpgames.com' },
+    ],
+  },
+  {
+    id: 'lu', mapName: 'Luxembourg', name: '卢森堡', nameEn: 'Luxembourg', flag: '🇱🇺',
+    lat: 49.8, lon: 6.1, hideLabel: true,
+    enterprises: [
+      { name: '安赛乐米塔尔', nameEn: 'ArcelorMittal', category: '机械', desc: '全球最大钢铁集团，总部位于卢森堡，汽车板与高强钢技术全球领先。', website: 'https://corporate.arcelormittal.com' },
+      { name: 'SES', nameEn: 'SES', category: '计算机', desc: '卢森堡卫星运营商，地球同步与中轨卫星星座提供全球广播与数据连接。', website: 'https://www.ses.com' },
+      { name: '卢森堡航空', nameEn: 'Luxair', category: '机械', desc: '卢森堡国家航空公司，运营欧洲区域航线与货运包机业务。', website: 'https://www.luxair.lu' },
+    ],
+  },
+  {
+    id: 'by', mapName: 'Belarus', name: '白俄罗斯', nameEn: 'Belarus', flag: '🇧🇾',
+    lat: 53.7, lon: 27.9,
+    enterprises: [
+      { name: 'BelAZ', nameEn: 'BelAZ', category: '机械', desc: '白俄罗斯矿用自卸车制造商，220 吨级超大型矿卡出口全球矿区。', website: 'https://www.belaz.by' },
+      { name: 'MAZ', nameEn: 'MAZ', category: '机械', desc: '白俄罗斯卡车与客车制造商，重卡、底盘与专用车出口独联体与亚非。', website: 'https://www.maz.by' },
+      { name: '明斯克拖拉机', nameEn: 'MTZ', category: '机械', desc: '白俄罗斯拖拉机龙头，BELARUS 品牌农机覆盖全球中小农场作业。', website: 'https://www.belarus-tractor.com' },
+    ],
+  },
+  {
+    id: 'md', mapName: 'Moldova', name: '摩尔多瓦', nameEn: 'Moldova', flag: '🇲🇩',
+    lat: 47.0, lon: 28.4, hideLabel: true,
+    enterprises: [
+      { name: 'Moldtelecom', nameEn: 'Moldtelecom', category: '计算机', desc: '摩尔多瓦国有电信运营商，固网宽带、移动与数据中心业务覆盖全国。', website: 'https://www.moldtelecom.md' },
+      { name: 'Moldelectrica', nameEn: 'Moldelectrica', category: '电气', desc: '摩尔多瓦输电运营商，负责电网调度与与欧洲电网互联工程。', website: 'https://www.moldelectrica.md' },
+      { name: 'Moldcell', nameEn: 'Moldcell', category: '计算机', desc: '摩尔多瓦移动运营商，4G/5G 网络与数字服务覆盖城乡。', website: 'https://www.moldcell.md' },
+    ],
+  },
+  {
+    id: 'ba', mapName: 'Bosnia and Herz.', name: '波黑', nameEn: 'Bosnia and Herzegovina', flag: '🇧🇦',
+    lat: 43.9, lon: 17.5, hideLabel: true,
+    enterprises: [
+      { name: '安赛乐米塔尔泽尼察', nameEn: 'ArcelorMittal Zenica', category: '机械', desc: '波黑最大钢铁企业，长材与线材供应巴尔干建筑与制造市场。', website: 'https://corporate.arcelormittal.com' },
+      { name: '波黑电力', nameEn: 'Elektroprivreda BiH', category: '电气', desc: '波黑联邦电力公司，燃煤与水电资产支撑全国供电与出口。', website: 'https://www.epbih.ba' },
+      { name: 'BH Telecom', nameEn: 'BH Telecom', category: '计算机', desc: '波黑电信运营商，移动、固网与政企 ICT 服务覆盖全国。', website: 'https://www.bhtelecom.ba' },
+    ],
+  },
+  {
+    id: 'al', mapName: 'Albania', name: '阿尔巴尼亚', nameEn: 'Albania', flag: '🇦🇱',
+    lat: 41.3, lon: 20.0, hideLabel: true,
+    enterprises: [
+      { name: 'KESH', nameEn: 'KESH', category: '电气', desc: '阿尔巴尼亚国家电力公司，以德里纳河梯级水电站为主体供电。', website: 'https://www.kesh.al' },
+      { name: 'Albpetrol', nameEn: 'Albpetrol', category: '电气', desc: '阿尔巴尼亚国有油气公司，油田运营与炼化产品销售。', website: 'https://www.albpetrol.al' },
+      { name: 'One Albania', nameEn: 'One Albania', category: '计算机', desc: '阿尔巴尼亚电信运营商，移动与光纤宽带网络覆盖全国。', website: 'https://www.one.al' },
+    ],
+  },
+  {
+    id: 'mk', mapName: 'Macedonia', name: '北马其顿', nameEn: 'North Macedonia', flag: '🇲🇰',
+    lat: 41.6, lon: 21.7, hideLabel: true,
+    enterprises: [
+      { name: '马其顿电信', nameEn: 'Makedonski Telekom', category: '计算机', desc: '北马其顿最大电信运营商，移动、宽带与数字化服务覆盖全国。', website: 'https://www.telekom.mk' },
+      { name: 'ELEM', nameEn: 'ELEM', category: '电气', desc: '北马其顿国有电力公司，水电与燃煤电站承担主力发电。', website: 'https://www.elem.com.mk' },
+      { name: 'Makstil', nameEn: 'Makstil', category: '机械', desc: '北马其顿钢铁企业，热轧板材与钢管产品供应欧洲市场。', website: 'https://www.makstil.com.mk' },
+    ],
+  },
+  {
+    id: 'me', mapName: 'Montenegro', name: '黑山', nameEn: 'Montenegro', flag: '🇲🇪',
+    lat: 42.7, lon: 19.2, hideLabel: true,
+    enterprises: [
+      { name: '黑山电力', nameEn: 'EPCG', category: '电气', desc: '黑山国家电力公司，水电与燃煤发电并推进风电与光伏项目。', website: 'https://www.epcg.com' },
+      { name: '黑山电信', nameEn: 'Crnogorski Telekom', category: '计算机', desc: '黑山电信运营商，移动、固网与数字化服务覆盖全国。', website: 'https://www.telekom.me' },
+      { name: '巴尔港', nameEn: 'Luka Bar', category: '机械', desc: '黑山亚得里亚海最大港口运营方，承担散货与集装箱转运。', website: 'https://www.lukabar.com' },
+    ],
+  },
+  {
+    id: 'xk', mapName: 'Kosovo', name: '科索沃', nameEn: 'Kosovo', flag: '🇽🇰',
+    lat: 42.6, lon: 21.0, hideLabel: true,
+    enterprises: [
+      { name: 'KOSTT', nameEn: 'KOSTT', category: '电气', desc: '科索沃输配电系统运营商，负责电网调度与区域互联。', website: 'https://www.kostt.com' },
+      { name: 'Ipko', nameEn: 'Ipko', category: '计算机', desc: '科索沃电信运营商，移动、宽带与数字电视服务覆盖全国。', website: 'https://www.ipko.com' },
+      { name: 'Trepça', nameEn: 'Trepça', category: '机械', desc: '科索沃历史悠久的矿业与金属冶炼联合企业，铅锌矿与机械加工。', website: 'https://www.trepca.com' },
+    ],
+  },
+  {
+    id: 'mt', mapName: 'Malta', name: '马耳他', nameEn: 'Malta', flag: '🇲🇹',
+    lat: 35.9, lon: 14.4, hideLabel: true,
+    enterprises: [
+      { name: '意法半导体马耳他', nameEn: 'STMicroelectronics Malta', category: '计算机', desc: '意法半导体马耳他工厂，功率器件与模拟芯片封装测试基地。', website: 'https://www.st.com' },
+      { name: 'Enemalta', nameEn: 'Enemalta', category: '电气', desc: '马耳他国有电力公司，发电、配电与海底电缆互联保障岛国供电。', website: 'https://www.enemalta.com.mt' },
+      { name: '马耳他自由港', nameEn: 'Malta Freeport Terminals', category: '机械', desc: '地中海重要中转港运营方，集装箱与滚装货物转运枢纽。', website: 'https://www.maltafreeport.com.mt' },
+    ],
+  },
+  {
+    id: 'cy', mapName: 'Cyprus', name: '塞浦路斯', nameEn: 'Cyprus', flag: '🇨🇾',
+    lat: 35.0, lon: 33.2, hideLabel: true,
+    enterprises: [
+      { name: 'Cyta', nameEn: 'Cyta', category: '计算机', desc: '塞浦路斯国有电信运营商，移动、宽带与海底光缆业务覆盖全国。', website: 'https://www.cyta.com.cy' },
+      { name: '塞浦路斯电力局', nameEn: 'Electricity Authority of Cyprus', category: '电气', desc: '塞浦路斯电力公司，发电与输配电一体化运营岛国电网。', website: 'https://www.eac.com.cy' },
+      { name: 'Vassiliko', nameEn: 'Vassiliko Cement Works', category: '机械', desc: '塞浦路斯水泥与混凝土龙头，供应全岛基建与建材市场。', website: 'https://www.vassiliko.com' },
+    ],
+  },
+  /* ---------- 亚洲（扩充） ---------- */
+  {
+    id: 'ge', mapName: 'Georgia', name: '格鲁吉亚', nameEn: 'Georgia', flag: '🇬🇪',
+    lat: 42.0, lon: 43.5,
+    enterprises: [
+      { name: 'Telasi', nameEn: 'Telasi', category: '电气', desc: '格鲁吉亚配电公司，负责第比利斯及周边地区电网运营。', website: 'https://www.telasi.ge' },
+      { name: '格鲁吉亚铁路', nameEn: 'Georgian Railway', category: '机械', desc: '格鲁吉亚国家铁路，承担黑海港口与高加索过境货运。', website: 'https://www.railway.ge' },
+      { name: 'Wissol', nameEn: 'Wissol Group', category: '电气', desc: '格鲁吉亚燃油零售与能源集团，加油站网络覆盖全国。', website: 'https://wissol.ge' },
+    ],
+  },
+  {
+    id: 'am', mapName: 'Armenia', name: '亚美尼亚', nameEn: 'Armenia', flag: '🇦🇲',
+    lat: 40.1, lon: 44.5,
+    enterprises: [
+      { name: '赞格祖尔铜钼联合', nameEn: 'ZCMC', category: '机械', desc: '亚美尼亚最大矿业与冶金企业，铜钼精矿出口与金属加工。', website: 'https://www.zcmc.am' },
+      { name: '亚美尼亚电网', nameEn: 'Electric Networks of Armenia', category: '电气', desc: '亚美尼亚配电运营商，覆盖全国城乡电力供应与电网改造。', website: 'https://www.ena.am' },
+      { name: 'Beeline 亚美尼亚', nameEn: 'ArmenTel', category: '计算机', desc: '亚美尼亚电信运营商，移动、固网与互联网服务覆盖全国。', website: 'https://www.beeline.am' },
+    ],
+  },
+  {
+    id: 'jo', mapName: 'Jordan', name: '约旦', nameEn: 'Jordan', flag: '🇯🇴',
+    lat: 31.0, lon: 36.0,
+    enterprises: [
+      { name: '阿拉伯钾盐', nameEn: 'Arab Potash', category: '机械', desc: '约旦死海钾盐生产商，钾肥与工业盐出口全球农业市场。', website: 'https://www.arabpotash.com' },
+      { name: '约旦磷矿', nameEn: 'Jordan Phosphate Mines', category: '机械', desc: '约旦磷矿石与磷肥龙头，储量与出口量居全球前列。', website: 'https://www.jpmc.com.jo' },
+      { name: 'Orange 约旦', nameEn: 'Orange Jordan', category: '计算机', desc: '约旦电信运营商，移动、宽带与数字化服务覆盖全国。', website: 'https://www.orange.jo' },
+    ],
+  },
+  {
+    id: 'lb', mapName: 'Lebanon', name: '黎巴嫩', nameEn: 'Lebanon', flag: '🇱🇧',
+    lat: 33.9, lon: 35.8, hideLabel: true,
+    enterprises: [
+      { name: 'CCC', nameEn: 'Consolidated Contractors Company', category: '机械', desc: '黎巴嫩起家的国际工程总包集团，承建中东与全球大型基建项目。', website: 'https://www.ccc.net' },
+      { name: 'Touch', nameEn: 'Touch', category: '计算机', desc: '黎巴嫩移动运营商，4G 网络与数字服务覆盖全国。', website: 'https://www.touch.com.lb' },
+      { name: '黎巴嫩电力', nameEn: 'Electricité du Liban', category: '电气', desc: '黎巴嫩国有电力公司，发电与输配电运营，推进电网重建。', website: 'https://www.edl.gov.lb' },
+    ],
+  },
+  {
+    id: 'sy', mapName: 'Syria', name: '叙利亚', nameEn: 'Syria', flag: '🇸🇾',
+    lat: 35.0, lon: 38.0,
+    enterprises: [
+      { name: 'Syriatel', nameEn: 'Syriatel', category: '计算机', desc: '叙利亚主要移动运营商，通信网络与数字服务覆盖全国。', website: 'https://www.syriatel.com' },
+      { name: '叙利亚石油公司', nameEn: 'Syrian Petroleum Company', category: '电气', desc: '叙利亚国有油气企业，油田勘探开发与原油生产。', website: 'https://www.spc.gov.sy' },
+      { name: '叙利亚航空', nameEn: 'Syrian Air', category: '机械', desc: '叙利亚国家航空公司，运营区域客运与货运航线。', website: 'https://www.syriaair.com' },
+    ],
+  },
+  {
+    id: 'iq', mapName: 'Iraq', name: '伊拉克', nameEn: 'Iraq', flag: '🇮🇶',
+    lat: 33.0, lon: 43.7,
+    enterprises: [
+      { name: '巴士拉石油', nameEn: 'Basra Oil Company', category: '电气', desc: '伊拉克最大油田运营方，鲁迈拉与西古尔纳原油产能核心。', website: 'https://www.boc.gov.iq' },
+      { name: 'Asiacell', nameEn: 'Asiacell', category: '计算机', desc: '伊拉克移动运营商，全国网络覆盖与数字金融业务。', website: 'https://www.asiacell.com' },
+      { name: 'Zain 伊拉克', nameEn: 'Zain Iraq', category: '计算机', desc: '伊拉克主要电信运营商，移动网络与政企 ICT 服务。', website: 'https://www.iq.zain.com' },
+    ],
+  },
+  {
+    id: 'af', mapName: 'Afghanistan', name: '阿富汗', nameEn: 'Afghanistan', flag: '🇦🇫',
+    lat: 34.0, lon: 66.0,
+    enterprises: [
+      { name: 'DABS', nameEn: 'Da Afghanistan Breshna Sherkat', category: '电气', desc: '阿富汗国家电力公司，发电、输配电与进口电力调度。', website: 'https://www.dabs.af' },
+      { name: 'Roshan', nameEn: 'Roshan', category: '计算机', desc: '阿富汗电信运营商，移动通信与移动支付服务覆盖全国。', website: 'https://www.roshan.af' },
+      { name: 'Ghazanfar 集团', nameEn: 'Ghazanfar Group', category: '机械', desc: '阿富汗工业集团，水泥、建材与能源项目投资运营。', website: 'https://www.ghazanfargroup.com' },
+    ],
+  },
+  {
+    id: 'lk', mapName: 'Sri Lanka', name: '斯里兰卡', nameEn: 'Sri Lanka', flag: '🇱🇰',
+    lat: 7.5, lon: 80.8,
+    enterprises: [
+      { name: '锡兰电力局', nameEn: 'Ceylon Electricity Board', category: '电气', desc: '斯里兰卡国有电力公司，发电、输电与配电一体化运营。', website: 'https://www.ceb.lk' },
+      { name: 'Dialog', nameEn: 'Dialog Axiata', category: '计算机', desc: '斯里兰卡最大移动运营商，4G/5G 与数字支付业务领先。', website: 'https://www.dialog.lk' },
+      { name: 'MAS Holdings', nameEn: 'MAS Holdings', category: '机械', desc: '斯里兰卡服装与功能性面料制造巨头，全球运动品牌核心供应商。', website: 'https://www.masholdings.com' },
+    ],
+  },
+  {
+    id: 'np', mapName: 'Nepal', name: '尼泊尔', nameEn: 'Nepal', flag: '🇳🇵',
+    lat: 28.2, lon: 84.0,
+    enterprises: [
+      { name: '尼泊尔电力局', nameEn: 'Nepal Electricity Authority', category: '电气', desc: '尼泊尔国家电力公司，水电开发、输电与配电网运营。', website: 'https://www.nea.gov.np' },
+      { name: 'Ncell', nameEn: 'Ncell', category: '计算机', desc: '尼泊尔移动运营商，网络覆盖与数字服务覆盖全国。', website: 'https://www.ncell.com.np' },
+      { name: '尼泊尔电信', nameEn: 'Nepal Telecom', category: '计算机', desc: '尼泊尔国有电信运营商，固网、宽带与移动业务覆盖城乡。', website: 'https://www.ntc.com.np' },
+    ],
+  },
+  {
+    id: 'mm', mapName: 'Myanmar', name: '缅甸', nameEn: 'Myanmar', flag: '🇲🇲',
+    lat: 21.0, lon: 96.0,
+    enterprises: [
+      { name: '缅甸油气', nameEn: 'MOGE', category: '电气', desc: '缅甸国有油气企业，油气勘探开发与管道天然气供应。', website: 'https://www.moge.gov.mm' },
+      { name: 'Mytel', nameEn: 'Mytel', category: '计算机', desc: '缅甸移动运营商，4G 网络与光纤骨干网建设运营。', website: 'https://www.mytel.com.mm' },
+      { name: '缅甸铁路', nameEn: 'Myanmar Railways', category: '机械', desc: '缅甸国家铁路，货运与客运网络连接主要城市与港口。', website: 'https://www.myanmarrailway.com' },
+    ],
+  },
+  {
+    id: 'kh', mapName: 'Cambodia', name: '柬埔寨', nameEn: 'Cambodia', flag: '🇰🇭',
+    lat: 12.6, lon: 105.0,
+    enterprises: [
+      { name: '柬埔寨电力', nameEn: 'Electricité du Cambodge', category: '电气', desc: '柬埔寨国家电力公司，发电、输电与配电网络运营。', website: 'https://www.edc.com.kh' },
+      { name: 'Cellcard', nameEn: 'Cellcard', category: '计算机', desc: '柬埔寨移动运营商，网络覆盖与数字金融业务。', website: 'https://www.cellcard.com.kh' },
+      { name: '吴哥航空', nameEn: 'Cambodia Angkor Air', category: '机械', desc: '柬埔寨国家航空公司，运营区域客运与旅游航线。', website: 'https://www.cambodiaangkorair.com' },
+    ],
+  },
+  {
+    id: 'la', mapName: 'Laos', name: '老挝', nameEn: 'Laos', flag: '🇱🇦',
+    lat: 19.5, lon: 103.0,
+    enterprises: [
+      { name: '老挝电力', nameEn: 'EDL', category: '电气', desc: '老挝国家电力公司，水电开发与“东南亚蓄电池”输电出口。', website: 'https://www.edl.com.la' },
+      { name: 'Lao Telecom', nameEn: 'Lao Telecom', category: '计算机', desc: '老挝电信运营商，移动、宽带与数据中心服务。', website: 'https://www.laotel.com' },
+      { name: 'Phu Bia Mining', nameEn: 'Phu Bia Mining', category: '机械', desc: '老挝大型铜金矿运营方，采矿与选冶一体化生产。', website: 'https://www.panaust.com.au' },
+    ],
+  },
+  {
+    id: 'mn', mapName: 'Mongolia', name: '蒙古', nameEn: 'Mongolia', flag: '🇲🇳',
+    lat: 46.9, lon: 103.8,
+    enterprises: [
+      { name: '额尔登特矿', nameEn: 'Erdenet Mining', category: '机械', desc: '蒙古最大铜钼矿之一，采矿与精矿生产支撑国家出口。', website: 'https://www.erdenetmc.mn' },
+      { name: '奥尤陶勒盖', nameEn: 'Oyu Tolgoi', category: '机械', desc: '蒙古大型铜金矿，力拓参与运营，地下采矿工程持续扩产。', website: 'https://www.oyutolgoi.com' },
+      { name: 'Mobicom', nameEn: 'Mobicom', category: '计算机', desc: '蒙古移动运营商，通信网络与数字服务覆盖全国。', website: 'https://www.mobicom.mn' },
+    ],
+  },
+  {
+    id: 'tm', mapName: 'Turkmenistan', name: '土库曼斯坦', nameEn: 'Turkmenistan', flag: '🇹🇲',
+    lat: 39.0, lon: 59.5,
+    enterprises: [
+      { name: '土库曼石油', nameEn: 'Türkmennebit', category: '电气', desc: '土库曼斯坦国有油气公司，天然气与原油勘探开发。', website: 'https://www.turkmennebit.gov.tm' },
+      { name: '土库曼航空', nameEn: 'Turkmenistan Airlines', category: '机械', desc: '土库曼斯坦国家航空公司，运营区域与国际航线。', website: 'https://www.turkmenistanairlines.gov.tm' },
+      { name: '土库曼电信', nameEn: 'Turkmentelecom', category: '计算机', desc: '土库曼斯坦国有电信运营商，固网、移动与互联网服务。', website: 'https://www.turkmentelecom.gov.tm' },
+    ],
+  },
+  {
+    id: 'kg', mapName: 'Kyrgyzstan', name: '吉尔吉斯斯坦', nameEn: 'Kyrgyzstan', flag: '🇰🇬',
+    lat: 41.2, lon: 74.6,
+    enterprises: [
+      { name: 'Kyrgyztelecom', nameEn: 'Kyrgyztelecom', category: '计算机', desc: '吉尔吉斯斯坦国有电信运营商，固网与宽带服务覆盖全国。', website: 'https://www.kt.kg' },
+      { name: '库姆托尔金矿', nameEn: 'Kumtor Gold', category: '机械', desc: '吉尔吉斯斯坦最大金矿，露天开采与选矿生产。', website: 'https://www.centerragold.com' },
+      { name: '国家电力', nameEn: 'Electric Stations', category: '电气', desc: '吉尔吉斯斯坦国有发电公司，水电为主体的电力系统。', website: 'https://www.energo.kg' },
+    ],
+  },
+  {
+    id: 'tj', mapName: 'Tajikistan', name: '塔吉克斯坦', nameEn: 'Tajikistan', flag: '🇹🇯',
+    lat: 38.5, lon: 71.0,
+    enterprises: [
+      { name: 'TALCO', nameEn: 'Tajik Aluminum Company', category: '机械', desc: '塔吉克斯坦铝冶炼企业，依托水电生产原铝并出口。', website: 'https://www.talco.tj' },
+      { name: 'Barqi Tojik', nameEn: 'Barqi Tojik', category: '电气', desc: '塔吉克斯坦国家电力公司，水电开发与输配电运营。', website: 'https://www.barqitojik.tj' },
+      { name: 'Tcell', nameEn: 'Tcell', category: '计算机', desc: '塔吉克斯坦移动运营商，4G 网络与数字服务覆盖全国。', website: 'https://www.tcell.tj' },
+    ],
+  },
+  {
+    id: 'ye', mapName: 'Yemen', name: '也门', nameEn: 'Yemen', flag: '🇾🇪',
+    lat: 15.5, lon: 47.5,
+    enterprises: [
+      { name: '也门石油', nameEn: 'Yemen Petroleum Company', category: '电气', desc: '也门国有油气企业，炼油与成品油供应。', website: 'https://www.ypc.com.ye' },
+      { name: '也门电信', nameEn: 'Public Telecommunications Corporation', category: '计算机', desc: '也门国有电信运营商，固网与移动通信服务。', website: 'https://www.ptc.gov.ye' },
+      { name: '也门航空', nameEn: 'Yemenia', category: '机械', desc: '也门国家航空公司，运营区域客运航线。', website: 'https://www.yemenia.com' },
+    ],
+  },
+  {
+    id: 'bh', mapName: 'Bahrain', name: '巴林', nameEn: 'Bahrain', flag: '🇧🇭',
+    lat: 26.0, lon: 50.5, hideLabel: true,
+    enterprises: [
+      { name: 'Alba', nameEn: 'Aluminium Bahrain', category: '机械', desc: '巴林铝业，全球最大单体铝冶炼厂之一，原铝出口全球。', website: 'https://www.alba.com.bh' },
+      { name: 'Batelco', nameEn: 'Batelco', category: '计算机', desc: '巴林电信运营商，移动、宽带与政企 ICT 服务。', website: 'https://www.batelco.com' },
+      { name: 'Bapco', nameEn: 'Bahrain Petroleum Company', category: '电气', desc: '巴林国家石油公司，炼油与油气生产，现代化炼厂扩建推进。', website: 'https://www.bapco.com.bh' },
+    ],
+  },
+  {
+    id: 'ps', mapName: 'Palestine', name: '巴勒斯坦', nameEn: 'Palestine', flag: '🇵🇸',
+    lat: 31.9, lon: 35.2, hideLabel: true,
+    enterprises: [
+      { name: 'Paltel', nameEn: 'Paltel', category: '计算机', desc: '巴勒斯坦电信集团，固网、移动与互联网服务覆盖约旦河西岸与加沙。', website: 'https://www.paltel.ps' },
+      { name: 'JDECO', nameEn: 'Jerusalem District Electricity Company', category: '电气', desc: '巴勒斯坦配电公司，负责耶路撒冷东部与周边地区供电。', website: 'https://www.jdeco.net' },
+      { name: '巴勒斯坦电力', nameEn: 'Palestine Electric Company', category: '电气', desc: '巴勒斯坦发电与配电企业，参与本地电站与电网建设。', website: 'https://www.pec.ps' },
+    ],
+  },
+  {
+    id: 'tl', mapName: 'Timor-Leste', name: '东帝汶', nameEn: 'Timor-Leste', flag: '🇹🇱',
+    lat: -8.8, lon: 125.9, hideLabel: true,
+    enterprises: [
+      { name: '东帝汶电力', nameEn: 'EDTL', category: '电气', desc: '东帝汶国家电力公司，发电、配电与农村电气化工程。', website: 'https://www.edtl.gov.tl' },
+      { name: 'Telkomcel', nameEn: 'Telkomcel', category: '计算机', desc: '东帝汶移动运营商，通信网络与数字服务覆盖全国。', website: 'https://www.telkomcel.tl' },
+      { name: '帝力港', nameEn: 'Timor Port', category: '机械', desc: '东帝汶帝力港运营方，承担集装箱与散货进出口。', website: 'https://www.timorport.com' },
+    ],
+  },
+  {
+    id: 'bt', mapName: 'Bhutan', name: '不丹', nameEn: 'Bhutan', flag: '🇧🇹',
+    lat: 27.5, lon: 90.5,
+    enterprises: [
+      { name: 'Druk Green Power', nameEn: 'Druk Green Power', category: '电气', desc: '不丹国有水电集团，梯级水电站与对印度电力出口。', website: 'https://www.drukgreen.bt' },
+      { name: '不丹电信', nameEn: 'Bhutan Telecom', category: '计算机', desc: '不丹国有电信运营商，固网、移动与宽带服务覆盖全国。', website: 'https://www.bt.bt' },
+      { name: 'Dungsam 水泥', nameEn: 'Dungsam Cement', category: '机械', desc: '不丹水泥制造企业，供应国内基建与水电工程。', website: 'https://www.dungsamcement.com' },
+    ],
+  },
+  {
+    id: 'bn', mapName: 'Brunei', name: '文莱', nameEn: 'Brunei', flag: '🇧🇳',
+    lat: 4.5, lon: 114.7, hideLabel: true,
+    enterprises: [
+      { name: '文莱壳牌石油', nameEn: 'Brunei Shell Petroleum', category: '电气', desc: '文莱油气生产主力，海上油田与天然气供应一体化运营。', website: 'https://www.bsp.com.bn' },
+      { name: 'DST', nameEn: 'DST', category: '计算机', desc: '文莱电信运营商，移动、宽带与数字服务覆盖全国。', website: 'https://www.dst.com.bn' },
+      { name: '文莱液化天然气', nameEn: 'Brunei LNG', category: '电气', desc: '文莱液化天然气公司，LNG 生产与出口长期供应日本韩国。', website: 'https://www.bruneilng.com' },
+    ],
+  },
+  {
+    id: 'kp', mapName: 'North Korea', name: '朝鲜', nameEn: 'North Korea', flag: '🇰🇵',
+    lat: 40.0, lon: 127.0, hideLabel: true,
+    enterprises: [
+      { name: '朝鲜电力工业省', nameEn: 'DPRK Power Industry', category: '电气', desc: '朝鲜电力主管部门，统筹水电站与火电厂运行及电网调度。', website: 'https://www.korea-dpr.com' },
+      { name: '朝鲜机械工业省', nameEn: 'DPRK Machine Industry', category: '机械', desc: '朝鲜机械制造主管部门，机床、矿山设备与运输机械生产。', website: 'https://www.korea-dpr.com' },
+      { name: '朝鲜计算机中心', nameEn: 'Korea Computer Center', category: '计算机', desc: '朝鲜软件研发机构，操作系统、办公软件与网络技术开发。', website: 'https://www.korea-dpr.com' },
+    ],
+  },
+  /* ---------- 非洲（扩充） ---------- */
+  {
+    id: 'et', mapName: 'Ethiopia', name: '埃塞俄比亚', nameEn: 'Ethiopia', flag: '🇪🇹',
+    lat: 9.0, lon: 39.0,
+    enterprises: [
+      { name: '埃塞俄比亚航空', nameEn: 'Ethiopian Airlines', category: '机械', desc: '非洲最大航空公司，机队规模与航线网络领先，并运营航空维修基地。', website: 'https://www.ethiopianairlines.com' },
+      { name: 'Ethio Telecom', nameEn: 'Ethio Telecom', category: '计算机', desc: '埃塞俄比亚国有电信运营商，移动、宽带与数字支付覆盖全国。', website: 'https://www.ethiotelecom.et' },
+      { name: '埃塞俄比亚电力', nameEn: 'Ethiopian Electric Power', category: '电气', desc: '埃塞俄比亚国家发电企业，复兴大坝等水电项目支撑区域电力出口。', website: 'https://www.eep.com.et' },
+    ],
+  },
+  {
+    id: 'gh', mapName: 'Ghana', name: '加纳', nameEn: 'Ghana', flag: '🇬🇭',
+    lat: 7.9, lon: -1.0,
+    enterprises: [
+      { name: '沃尔特河管理局', nameEn: 'Volta River Authority', category: '电气', desc: '加纳国有发电企业，阿科松博水电站与火电资产支撑全国供电。', website: 'https://www.vra.com' },
+      { name: 'MTN 加纳', nameEn: 'MTN Ghana', category: '计算机', desc: '加纳最大移动运营商，4G/5G 与移动支付服务覆盖全国。', website: 'https://www.mtn.com.gh' },
+      { name: '纽蒙特加纳', nameEn: 'Newmont Ghana', category: '机械', desc: '加纳大型金矿运营方，Ahafo 与 Akyem 矿山机械化开采。', website: 'https://www.newmont.com' },
+    ],
+  },
+  {
+    id: 'ci', mapName: "Côte d'Ivoire", name: '科特迪瓦', nameEn: "Côte d'Ivoire", flag: '🇨🇮',
+    lat: 7.5, lon: -5.5,
+    enterprises: [
+      { name: '科特迪瓦电力', nameEn: 'CIE', category: '电气', desc: '科特迪瓦电力公司，发电、输电与配电运营覆盖全国。', website: 'https://www.cie.ci' },
+      { name: 'Orange 科特迪瓦', nameEn: 'Orange Côte d\'Ivoire', category: '计算机', desc: '科特迪瓦最大电信运营商，移动与宽带网络覆盖全国。', website: 'https://www.orange.ci' },
+      { name: 'SIFCA', nameEn: 'SIFCA', category: '机械', desc: '西非农工集团，棕榈油、橡胶与糖业加工设备与工厂运营。', website: 'https://www.sifca.com' },
+    ],
+  },
+  {
+    id: 'cm', mapName: 'Cameroon', name: '喀麦隆', nameEn: 'Cameroon', flag: '🇨🇲',
+    lat: 5.5, lon: 12.5,
+    enterprises: [
+      { name: '喀麦隆电力', nameEn: 'SONEL', category: '电气', desc: '喀麦隆国家电力公司，水电与火电发电及输配电运营。', website: 'https://www.sonel.cm' },
+      { name: 'CAMTEL', nameEn: 'CAMTEL', category: '计算机', desc: '喀麦隆国有电信运营商，固网、宽带与移动业务覆盖全国。', website: 'https://www.camtel.cm' },
+      { name: 'Alucam', nameEn: 'Alucam', category: '机械', desc: '喀麦隆铝冶炼企业，依托水电生产原铝并供应西非市场。', website: 'https://www.alucam.com' },
+    ],
+  },
+  {
+    id: 'sn', mapName: 'Senegal', name: '塞内加尔', nameEn: 'Senegal', flag: '🇸🇳',
+    lat: 14.5, lon: -14.5,
+    enterprises: [
+      { name: 'SENELEC', nameEn: 'SENELEC', category: '电气', desc: '塞内加尔国家电力公司，发电与输配电网络覆盖全国。', website: 'https://www.senelec.sn' },
+      { name: 'Sonatel', nameEn: 'Sonatel', category: '计算机', desc: '塞内加尔电信集团，移动、宽带与数字金融服务西非多国。', website: 'https://www.sonatel.com' },
+      { name: 'Suneor', nameEn: 'Suneor', category: '机械', desc: '塞内加尔花生油与农产品加工企业，压榨与精炼设备一体化。', website: 'https://www.suneor.sn' },
+    ],
+  },
+  {
+    id: 'tn', mapName: 'Tunisia', name: '突尼斯', nameEn: 'Tunisia', flag: '🇹🇳',
+    lat: 34.0, lon: 9.5,
+    enterprises: [
+      { name: 'STEG', nameEn: 'STEG', category: '电气', desc: '突尼斯国家电力与燃气公司，发电、输配电与天然气供应。', website: 'https://www.steg.com.tn' },
+      { name: '突尼斯电信', nameEn: 'Tunisie Telecom', category: '计算机', desc: '突尼斯国有电信运营商，固网、移动与宽带服务覆盖全国。', website: 'https://www.tunisietelecom.tn' },
+      { name: '突尼斯航空', nameEn: 'Tunisair', category: '机械', desc: '突尼斯国家航空公司，运营欧洲、非洲与中东航线。', website: 'https://www.tunisair.com' },
+    ],
+  },
+  {
+    id: 'ly', mapName: 'Libya', name: '利比亚', nameEn: 'Libya', flag: '🇱🇾',
+    lat: 27.0, lon: 17.0,
+    enterprises: [
+      { name: '利比亚国家石油', nameEn: 'National Oil Corporation', category: '电气', desc: '利比亚国家石油公司，油田运营与原油出口，产能恢复推进。', website: 'https://www.noc.ly' },
+      { name: '利比亚电信', nameEn: 'Libya Telecom', category: '计算机', desc: '利比亚电信运营商，固网、移动与互联网服务覆盖全国。', website: 'https://www.ltt.ly' },
+      { name: '利比亚航空', nameEn: 'Libyan Airlines', category: '机械', desc: '利比亚国家航空公司，运营区域客运航线。', website: 'https://www.libyanairlines.com' },
+    ],
+  },
+  {
+    id: 'sd', mapName: 'Sudan', name: '苏丹', nameEn: 'Sudan', flag: '🇸🇩',
+    lat: 15.5, lon: 32.5,
+    enterprises: [
+      { name: 'Sudatel', nameEn: 'Sudatel', category: '计算机', desc: '苏丹电信集团，固网、移动与宽带业务覆盖苏丹及西非多国。', website: 'https://www.sudatel.sd' },
+      { name: '苏丹石油公司', nameEn: 'Sudanese Petroleum Corporation', category: '电气', desc: '苏丹国有油气企业，炼油与成品油供应。', website: 'https://www.spc.gov.sd' },
+      { name: '苏丹航空', nameEn: 'Sudan Airways', category: '机械', desc: '苏丹国家航空公司，运营区域客运与货运航线。', website: 'https://www.sudanairways.com' },
+    ],
+  },
+  {
+    id: 'ss', mapName: 'S. Sudan', name: '南苏丹', nameEn: 'South Sudan', flag: '🇸🇸',
+    lat: 7.0, lon: 30.0, hideLabel: true,
+    enterprises: [
+      { name: 'Nilepet', nameEn: 'Nilepet', category: '电气', desc: '南苏丹国家石油公司，油田运营与原油出口管道管理。', website: 'https://www.nilepet.gov.ss' },
+      { name: 'MTN 南苏丹', nameEn: 'MTN South Sudan', category: '计算机', desc: '南苏丹移动运营商，通信网络与数字服务覆盖主要城市。', website: 'https://www.mtn.ss' },
+    ],
+  },
+  {
+    id: 'tz', mapName: 'Tanzania', name: '坦桑尼亚', nameEn: 'Tanzania', flag: '🇹🇿',
+    lat: -6.5, lon: 35.0,
+    enterprises: [
+      { name: 'TANESCO', nameEn: 'TANESCO', category: '电气', desc: '坦桑尼亚国家电力公司，水电、天然气发电与输配电运营。', website: 'https://www.tanesco.co.tz' },
+      { name: 'Vodacom 坦桑尼亚', nameEn: 'Vodacom Tanzania', category: '计算机', desc: '坦桑尼亚主要移动运营商，4G 网络与移动支付服务。', website: 'https://www.vodacom.co.tz' },
+      { name: '坦桑尼亚航空', nameEn: 'Air Tanzania', category: '机械', desc: '坦桑尼亚国家航空公司，机队更新与区域航线扩张。', website: 'https://www.airtanzania.co.tz' },
+    ],
+  },
+  {
+    id: 'ug', mapName: 'Uganda', name: '乌干达', nameEn: 'Uganda', flag: '🇺🇬',
+    lat: 1.0, lon: 32.0,
+    enterprises: [
+      { name: '乌干达发电', nameEn: 'UEGCL', category: '电气', desc: '乌干达国有发电公司，尼罗河水电项目开发与运营。', website: 'https://www.uegcl.com' },
+      { name: 'MTN 乌干达', nameEn: 'MTN Uganda', category: '计算机', desc: '乌干达最大移动运营商，移动支付与数字服务覆盖全国。', website: 'https://www.mtn.co.ug' },
+      { name: '乌干达航空', nameEn: 'Uganda Airlines', category: '机械', desc: '乌干达国家航空公司，运营区域与国际航线。', website: 'https://www.ugandairlines.com' },
+    ],
+  },
+  {
+    id: 'zw', mapName: 'Zimbabwe', name: '津巴布韦', nameEn: 'Zimbabwe', flag: '🇿🇼',
+    lat: -19.0, lon: 29.0,
+    enterprises: [
+      { name: 'ZESA', nameEn: 'ZESA', category: '电气', desc: '津巴布韦国家电力公司，发电、输电与配电运营，推进光伏项目。', website: 'https://www.zesa.co.zw' },
+      { name: 'Econet', nameEn: 'Econet Wireless', category: '计算机', desc: '津巴布韦最大移动运营商，通信与移动支付生态覆盖全国。', website: 'https://www.econet.co.zw' },
+      { name: 'ZMDC', nameEn: 'Zimbabwe Mining Development Corporation', category: '机械', desc: '津巴布韦国有矿业公司，金、铂与锂矿资源开发。', website: 'https://www.zmdc.co.zw' },
+    ],
+  },
+  {
+    id: 'ao', mapName: 'Angola', name: '安哥拉', nameEn: 'Angola', flag: '🇦🇴',
+    lat: -12.5, lon: 17.5,
+    enterprises: [
+      { name: 'Sonangol', nameEn: 'Sonangol', category: '电气', desc: '安哥拉国家石油公司，海上油田运营与炼化业务。', website: 'https://www.sonangol.co.ao' },
+      { name: 'Unitel', nameEn: 'Unitel', category: '计算机', desc: '安哥拉最大移动运营商，4G/5G 与数字服务覆盖全国。', website: 'https://www.unitel.ao' },
+      { name: 'TAAG', nameEn: 'TAAG Angola Airlines', category: '机械', desc: '安哥拉国家航空公司，运营非洲、欧洲与南美航线。', website: 'https://www.taag.com' },
+    ],
+  },
+  {
+    id: 'mz', mapName: 'Mozambique', name: '莫桑比克', nameEn: 'Mozambique', flag: '🇲🇿',
+    lat: -18.0, lon: 35.0,
+    enterprises: [
+      { name: 'EDM', nameEn: 'Electricidade de Moçambique', category: '电气', desc: '莫桑比克国家电力公司，发电、输电与配电运营。', website: 'https://www.edm.co.mz' },
+      { name: 'Tmcel', nameEn: 'Tmcel', category: '计算机', desc: '莫桑比克国有电信运营商，固网、移动与宽带服务。', website: 'https://www.tmcel.co.mz' },
+      { name: 'Mozal', nameEn: 'Mozal Aluminium', category: '机械', desc: '莫桑比克大型铝冶炼厂，依托水电生产原铝出口全球。', website: 'https://www.mozal.com' },
+    ],
+  },
+  {
+    id: 'bw', mapName: 'Botswana', name: '博茨瓦纳', nameEn: 'Botswana', flag: '🇧🇼',
+    lat: -22.0, lon: 24.0,
+    enterprises: [
+      { name: '博茨瓦纳电力', nameEn: 'Botswana Power Corporation', category: '电气', desc: '博茨瓦纳国有电力公司，燃煤发电与电网运营。', website: 'https://www.bpc.co.bw' },
+      { name: 'Mascom', nameEn: 'Mascom', category: '计算机', desc: '博茨瓦纳最大移动运营商，网络覆盖与数字服务。', website: 'https://www.mascom.bw' },
+      { name: 'Debswana', nameEn: 'Debswana', category: '机械', desc: '博茨瓦纳与戴比尔斯合资钻石企业，露天矿开采与选矿。', website: 'https://www.debswana.com' },
+    ],
+  },
+  {
+    id: 'na', mapName: 'Namibia', name: '纳米比亚', nameEn: 'Namibia', flag: '🇳🇦',
+    lat: -22.5, lon: 17.0,
+    enterprises: [
+      { name: 'NamPower', nameEn: 'NamPower', category: '电气', desc: '纳米比亚国家电力公司，发电、输电与区域电力交易。', website: 'https://www.nampower.com.na' },
+      { name: 'MTC 纳米比亚', nameEn: 'MTC Namibia', category: '计算机', desc: '纳米比亚最大移动运营商，网络覆盖与数字服务。', website: 'https://www.mtc.com.na' },
+      { name: 'Namdeb', nameEn: 'Namdeb', category: '机械', desc: '纳米比亚钻石开采企业，海岸与海上钻石矿运营。', website: 'https://www.namdeb.com' },
+    ],
+  },
+  {
+    id: 'cd', mapName: 'Dem. Rep. Congo', name: '刚果（金）', nameEn: 'DR Congo', flag: '🇨🇩',
+    lat: -2.5, lon: 23.0,
+    enterprises: [
+      { name: 'SNEL', nameEn: 'SNEL', category: '电气', desc: '刚果（金）国家电力公司，英加水电基地与全国输配电运营。', website: 'https://www.snel.cd' },
+      { name: 'Vodacom 刚果', nameEn: 'Vodacom Congo', category: '计算机', desc: '刚果（金）移动运营商，通信网络与移动支付服务。', website: 'https://www.vodacom.cd' },
+      { name: 'Gécamines', nameEn: 'Gécamines', category: '机械', desc: '刚果（金）国有矿业公司，铜钴矿资源开发与冶炼合作。', website: 'https://www.gecamines.cd' },
+    ],
+  },
+  {
+    id: 'cg', mapName: 'Congo', name: '刚果（布）', nameEn: 'Republic of the Congo', flag: '🇨🇬',
+    lat: -1.0, lon: 15.0, hideLabel: true,
+    enterprises: [
+      { name: 'SNPC', nameEn: 'SNPC', category: '电气', desc: '刚果（布）国家石油公司，海上油田运营与油气出口。', website: 'https://www.snpc-congo.com' },
+      { name: 'Airtel 刚果', nameEn: 'Airtel Congo', category: '计算机', desc: '刚果（布）移动运营商，网络覆盖与数字服务。', website: 'https://www.airtel.cg' },
+      { name: 'Congo Terminal', nameEn: 'Congo Terminal', category: '机械', desc: '黑角港集装箱码头运营方，承担中非区域转运枢纽功能。', website: 'https://www.congoterminal.com' },
+    ],
+  },
+  {
+    id: 'zm', mapName: 'Zambia', name: '赞比亚', nameEn: 'Zambia', flag: '🇿🇲',
+    lat: -15.0, lon: 27.0,
+    enterprises: [
+      { name: 'ZESCO', nameEn: 'ZESCO', category: '电气', desc: '赞比亚国家电力公司，水电为主体的发电与输配电运营。', website: 'https://www.zesco.co.zm' },
+      { name: 'MTN 赞比亚', nameEn: 'MTN Zambia', category: '计算机', desc: '赞比亚主要移动运营商，4G 网络与移动支付服务。', website: 'https://www.mtn.co.zm' },
+      { name: 'KCM', nameEn: 'Konkola Copper Mines', category: '机械', desc: '赞比亚大型铜矿企业，采矿、选矿与铜冶炼一体化。', website: 'https://www.kcm.co.zm' },
+    ],
+  },
+  {
+    id: 'rw', mapName: 'Rwanda', name: '卢旺达', nameEn: 'Rwanda', flag: '🇷🇼',
+    lat: -2.0, lon: 30.0, hideLabel: true,
+    enterprises: [
+      { name: '卢旺达能源', nameEn: 'Rwanda Energy Group', category: '电气', desc: '卢旺达国有能源集团，发电、配电与农村电气化。', website: 'https://www.reg.rw' },
+      { name: 'MTN 卢旺达', nameEn: 'MTN Rwanda', category: '计算机', desc: '卢旺达移动运营商，4G 网络与数字服务覆盖全国。', website: 'https://www.mtn.co.rw' },
+      { name: '卢旺达航空', nameEn: 'RwandAir', category: '机械', desc: '卢旺达国家航空公司，运营非洲与欧洲区域航线。', website: 'https://www.rwandair.com' },
+    ],
+  },
+  {
+    id: 'mg', mapName: 'Madagascar', name: '马达加斯加', nameEn: 'Madagascar', flag: '🇲🇬',
+    lat: -19.0, lon: 47.0,
+    enterprises: [
+      { name: 'Jirama', nameEn: 'Jirama', category: '电气', desc: '马达加斯加国家水电公司，发电、输配电与供水服务。', website: 'https://www.jirama.mg' },
+      { name: 'Telma', nameEn: 'Telma', category: '计算机', desc: '马达加斯加最大电信运营商，移动、宽带与数字化服务。', website: 'https://www.telma.mg' },
+      { name: '马达加斯加航空', nameEn: 'Madagascar Airlines', category: '机械', desc: '马达加斯加国家航空公司，运营区域与国际航线。', website: 'https://www.madagascar-airlines.com' },
+    ],
+  },
+  {
+    id: 'ml', mapName: 'Mali', name: '马里', nameEn: 'Mali', flag: '🇲🇱',
+    lat: 17.0, lon: -4.0,
+    enterprises: [
+      { name: '马里能源', nameEn: 'EDM', category: '电气', desc: '马里国家电力公司，水电与柴油发电及输配电运营。', website: 'https://www.edm.ml' },
+      { name: 'Orange 马里', nameEn: 'Orange Mali', category: '计算机', desc: '马里最大电信运营商，移动网络与移动支付服务。', website: 'https://www.orange.ml' },
+      { name: 'Syama 金矿', nameEn: 'Resolute Mining', category: '机械', desc: '马里 Syama 金矿运营方，地下与露天开采结合。', website: 'https://www.resolutemining.com' },
+    ],
+  },
+  {
+    id: 'bf', mapName: 'Burkina Faso', name: '布基纳法索', nameEn: 'Burkina Faso', flag: '🇧🇫',
+    lat: 12.5, lon: -1.5,
+    enterprises: [
+      { name: 'SONABEL', nameEn: 'SONABEL', category: '电气', desc: '布基纳法索国家电力公司，发电、输配电与光伏项目开发。', website: 'https://www.sonabel.bf' },
+      { name: 'Orange 布基纳法索', nameEn: 'Orange Burkina Faso', category: '计算机', desc: '布基纳法索主要电信运营商，移动与宽带网络覆盖全国。', website: 'https://www.orange.bf' },
+      { name: 'Essakane 金矿', nameEn: 'IAMGOLD', category: '机械', desc: '布基纳法索大型金矿运营方，露天开采与堆浸工艺。', website: 'https://www.iamgold.com' },
+    ],
+  },
+  {
+    id: 'so', mapName: 'Somalia', name: '索马里', nameEn: 'Somalia', flag: '🇸🇴',
+    lat: 6.0, lon: 46.0,
+    enterprises: [
+      { name: 'Hormuud', nameEn: 'Hormuud Telecom', category: '计算机', desc: '索马里最大电信运营商，移动通信与移动支付覆盖全国。', website: 'https://www.hormuud.com' },
+      { name: 'Golis', nameEn: 'Golis Telecom', category: '计算机', desc: '索马里邦特兰地区电信运营商，移动与宽带网络服务。', website: 'https://www.golis.net' },
+      { name: '索马里航空', nameEn: 'Somali Airlines', category: '机械', desc: '索马里国家航空公司，运营区域客运航线。', website: 'https://www.somaliaairlines.com' },
+    ],
+  },
+  {
+    id: 'ga', mapName: 'Gabon', name: '加蓬', nameEn: 'Gabon', flag: '🇬🇦',
+    lat: -0.8, lon: 11.5, hideLabel: true,
+    enterprises: [
+      { name: '加蓬石油', nameEn: 'Gabon Oil Company', category: '电气', desc: '加蓬国家石油公司，油田运营与原油出口业务。', website: 'https://www.goc.ga' },
+      { name: 'Airtel 加蓬', nameEn: 'Airtel Gabon', category: '计算机', desc: '加蓬移动运营商，通信网络与数字服务覆盖全国。', website: 'https://www.airtel.ga' },
+      { name: 'Comilog', nameEn: 'Comilog', category: '机械', desc: '加蓬锰矿开采与冶炼企业，全球高品位锰矿主要供应方。', website: 'https://www.comilog.com' },
+    ],
+  },
+  {
+    id: 'mw', mapName: 'Malawi', name: '马拉维', nameEn: 'Malawi', flag: '🇲🇼',
+    lat: -13.5, lon: 34.0,
+    enterprises: [
+      { name: 'ESCOM', nameEn: 'ESCOM', category: '电气', desc: '马拉维国家电力公司，水电与输配电网络运营。', website: 'https://www.escom.co.mw' },
+      { name: 'TNM', nameEn: 'TNM', category: '计算机', desc: '马拉维移动运营商，通信网络与移动支付服务。', website: 'https://www.tnm.co.mw' },
+      { name: '马拉维航空', nameEn: 'Malawi Airlines', category: '机械', desc: '马拉维国家航空公司，运营区域客运航线。', website: 'https://www.malawianairlines.com' },
+    ],
+  },
+  {
+    id: 'ne', mapName: 'Niger', name: '尼日尔', nameEn: 'Niger', flag: '🇳🇪',
+    lat: 17.0, lon: 9.0,
+    enterprises: [
+      { name: 'NIGELEC', nameEn: 'NIGELEC', category: '电气', desc: '尼日尔国家电力公司，发电、输配电与太阳能项目开发。', website: 'https://www.nigelec.ne' },
+      { name: 'Orange 尼日尔', nameEn: 'Orange Niger', category: '计算机', desc: '尼日尔主要电信运营商，移动与宽带网络服务。', website: 'https://www.orange.ne' },
+      { name: 'Somaïr', nameEn: 'Somaïr', category: '机械', desc: '尼日尔铀矿开采企业，欧安诺参与运营，露天矿与选矿厂。', website: 'https://www.ourano.com' },
+    ],
+  },
+  {
+    id: 'td', mapName: 'Chad', name: '乍得', nameEn: 'Chad', flag: '🇹🇩',
+    lat: 15.0, lon: 19.0,
+    enterprises: [
+      { name: '乍得电力', nameEn: 'SNE', category: '电气', desc: '乍得国家电力公司，发电与输配电网络运营。', website: 'https://www.sne.td' },
+      { name: 'Airtel 乍得', nameEn: 'Airtel Chad', category: '计算机', desc: '乍得移动运营商，通信网络与数字服务覆盖主要城市。', website: 'https://www.airtel.td' },
+      { name: '多巴油田', nameEn: 'Doba Oil Project', category: '电气', desc: '乍得南部油田项目，原油开采与管道外输。', website: 'https://www.exxonmobil.com' },
+    ],
+  },
+  {
+    id: 'mr', mapName: 'Mauritania', name: '毛里塔尼亚', nameEn: 'Mauritania', flag: '🇲🇷',
+    lat: 20.0, lon: -10.0,
+    enterprises: [
+      { name: 'Somelec', nameEn: 'Somelec', category: '电气', desc: '毛里塔尼亚国家电力公司，发电、输配电与可再生能源项目。', website: 'https://www.somelec.mr' },
+      { name: 'Mauritel', nameEn: 'Mauritel', category: '计算机', desc: '毛里塔尼亚电信运营商，移动与宽带网络覆盖全国。', website: 'https://www.mauritel.mr' },
+      { name: 'SNIM', nameEn: 'SNIM', category: '机械', desc: '毛里塔尼亚国有铁矿企业，铁矿石开采、铁路运输与港口装船。', website: 'https://www.snim.com' },
+    ],
+  },
+  /* ---------- 美洲与大洋洲（扩充） ---------- */
+  {
+    id: 've', mapName: 'Venezuela', name: '委内瑞拉', nameEn: 'Venezuela', flag: '🇻🇪',
+    lat: 8.0, lon: -66.0,
+    enterprises: [
+      { name: 'PDVSA', nameEn: 'PDVSA', category: '电气', desc: '委内瑞拉国家石油公司，奥里诺科重油带开发与炼化一体化。', website: 'https://www.pdvsa.com' },
+      { name: 'CANTV', nameEn: 'CANTV', category: '计算机', desc: '委内瑞拉国有电信运营商，固网、宽带与移动服务。', website: 'https://www.cantv.com.ve' },
+      { name: 'Sidor', nameEn: 'Sidor', category: '机械', desc: '委内瑞拉国有钢铁企业，板材与型材生产供应国内工业。', website: 'https://www.sidor.com.ve' },
+    ],
+  },
+  {
+    id: 'ec', mapName: 'Ecuador', name: '厄瓜多尔', nameEn: 'Ecuador', flag: '🇪🇨',
+    lat: -1.5, lon: -78.0,
+    enterprises: [
+      { name: 'Petroecuador', nameEn: 'Petroecuador', category: '电气', desc: '厄瓜多尔国家石油公司，亚马逊油田开采与炼油业务。', website: 'https://www.eppetroecuador.ec' },
+      { name: 'CELEC', nameEn: 'CELEC', category: '电气', desc: '厄瓜多尔国有发电集团，水电与地热项目运营。', website: 'https://www.celec.gob.ec' },
+      { name: 'CNT', nameEn: 'CNT', category: '计算机', desc: '厄瓜多尔国有电信运营商，固网、宽带与移动服务覆盖全国。', website: 'https://www.cnt.gob.ec' },
+    ],
+  },
+  {
+    id: 'uy', mapName: 'Uruguay', name: '乌拉圭', nameEn: 'Uruguay', flag: '🇺🇾',
+    lat: -33.0, lon: -56.0,
+    enterprises: [
+      { name: 'UTE', nameEn: 'UTE', category: '电气', desc: '乌拉圭国家电力公司，风电与水电占比高，输配电运营。', website: 'https://www.ute.com.uy' },
+      { name: 'Antel', nameEn: 'Antel', category: '计算机', desc: '乌拉圭国有电信运营商，光纤到户与5G网络覆盖全国。', website: 'https://www.antel.com.uy' },
+      { name: 'Montes del Plata', nameEn: 'Montes del Plata', category: '机械', desc: '乌拉圭纸浆与林业企业，桉树种植、制浆与港口物流一体化。', website: 'https://www.montesdelplata.com' },
+    ],
+  },
+  {
+    id: 'py', mapName: 'Paraguay', name: '巴拉圭', nameEn: 'Paraguay', flag: '🇵🇾',
+    lat: -23.5, lon: -58.0,
+    enterprises: [
+      { name: 'ANDE', nameEn: 'ANDE', category: '电气', desc: '巴拉圭国家电力公司，伊泰普水电份额与全国输配电运营。', website: 'https://www.ande.gov.py' },
+      { name: 'Tigo 巴拉圭', nameEn: 'Tigo Paraguay', category: '计算机', desc: '巴拉圭最大移动运营商，4G 网络与数字金融服务。', website: 'https://www.tigo.com.py' },
+      { name: '伊泰普', nameEn: 'Itaipú Binacional', category: '电气', desc: '巴西与巴拉圭共建的大型水电站，装机容量全球领先。', website: 'https://www.itaipu.gov.br' },
+    ],
+  },
+  {
+    id: 'bo', mapName: 'Bolivia', name: '玻利维亚', nameEn: 'Bolivia', flag: '🇧🇴',
+    lat: -16.5, lon: -64.0,
+    enterprises: [
+      { name: 'YPFB', nameEn: 'YPFB', category: '电气', desc: '玻利维亚国家石油公司，天然气开采、液化与管道出口。', website: 'https://www.ypfb.gob.bo' },
+      { name: 'Entel', nameEn: 'Entel Bolivia', category: '计算机', desc: '玻利维亚国有电信运营商，移动、宽带与卫星通信服务。', website: 'https://www.entel.bo' },
+      { name: 'COMIBOL', nameEn: 'COMIBOL', category: '机械', desc: '玻利维亚国有矿业公司，锡、锌与银矿开采冶炼。', website: 'https://www.comibol.gob.bo' },
+    ],
+  },
+  {
+    id: 'gt', mapName: 'Guatemala', name: '危地马拉', nameEn: 'Guatemala', flag: '🇬🇹',
+    lat: 15.5, lon: -90.0,
+    enterprises: [
+      { name: 'INDE', nameEn: 'INDE', category: '电气', desc: '危地马拉国家电力公司，水电与地热发电及电网运营。', website: 'https://www.inde.gob.gt' },
+      { name: 'Tigo 危地马拉', nameEn: 'Tigo Guatemala', category: '计算机', desc: '危地马拉最大移动运营商，网络覆盖与数字服务。', website: 'https://www.tigo.com.gt' },
+      { name: 'Cementos Progreso', nameEn: 'Cementos Progreso', category: '机械', desc: '危地马拉水泥龙头，水泥、混凝土与建材供应中美洲。', website: 'https://www.cementosprogreso.com' },
+    ],
+  },
+  {
+    id: 'cu', mapName: 'Cuba', name: '古巴', nameEn: 'Cuba', flag: '🇨🇺',
+    lat: 21.5, lon: -79.5,
+    enterprises: [
+      { name: '古巴电力联盟', nameEn: 'Unión Eléctrica', category: '电气', desc: '古巴国家电力公司，发电、输配电与电网改造运营。', website: 'https://www.une.cu' },
+      { name: 'ETECSA', nameEn: 'ETECSA', category: '计算机', desc: '古巴国有电信运营商，移动、固网与互联网服务。', website: 'https://www.etecsa.cu' },
+      { name: 'Cubaníquel', nameEn: 'Cubaníquel', category: '机械', desc: '古巴镍钴矿开采与冶炼企业，镍产品出口国际市场。', website: 'https://www.cubaniquel.cu' },
+    ],
+  },
+  {
+    id: 'do', mapName: 'Dominican Rep.', name: '多米尼加', nameEn: 'Dominican Republic', flag: '🇩🇴',
+    lat: 19.0, lon: -70.0,
+    enterprises: [
+      { name: 'EGEHID', nameEn: 'EGEHID', category: '电气', desc: '多米尼加水力发电公司，水电站运营与电网支撑。', website: 'https://www.egehid.gob.do' },
+      { name: 'Claro 多米尼加', nameEn: 'Claro Dominicana', category: '计算机', desc: '多米尼加主要电信运营商，移动、宽带与电视服务。', website: 'https://www.claro.com.do' },
+      { name: 'Cementos Cibao', nameEn: 'Cementos Cibao', category: '机械', desc: '多米尼加水泥制造企业，供应加勒比地区基建市场。', website: 'https://www.cementoscibao.com' },
+    ],
+  },
+  {
+    id: 'hn', mapName: 'Honduras', name: '洪都拉斯', nameEn: 'Honduras', flag: '🇭🇳',
+    lat: 15.0, lon: -86.5,
+    enterprises: [
+      { name: 'ENEE', nameEn: 'ENEE', category: '电气', desc: '洪都拉斯国家电力公司，发电、输电与配电运营。', website: 'https://www.enee.hn' },
+      { name: 'Tigo 洪都拉斯', nameEn: 'Tigo Honduras', category: '计算机', desc: '洪都拉斯主要移动运营商，通信网络与数字服务。', website: 'https://www.tigo.com.hn' },
+      { name: 'Cementos del Norte', nameEn: 'Cementos del Norte', category: '机械', desc: '洪都拉斯水泥制造企业，供应国内建筑与基建项目。', website: 'https://www.cementosdelnorte.com' },
+    ],
+  },
+  {
+    id: 'cr', mapName: 'Costa Rica', name: '哥斯达黎加', nameEn: 'Costa Rica', flag: '🇨🇷',
+    lat: 9.7, lon: -84.0,
+    enterprises: [
+      { name: 'ICE', nameEn: 'Grupo ICE', category: '电气', desc: '哥斯达黎加国家电力与电信集团，可再生能源发电占比极高。', website: 'https://www.grupoice.com' },
+      { name: '英特尔哥斯达黎加', nameEn: 'Intel Costa Rica', category: '计算机', desc: '英特尔哥斯达黎加工厂，芯片封装测试与工程研发中心。', website: 'https://www.intel.com' },
+      { name: 'Ad Astra', nameEn: 'Ad Astra Rocket Company', category: '机械', desc: '哥斯达黎加航天推进技术公司，研发等离子体火箭发动机。', website: 'https://www.adastrarocket.com' },
+    ],
+  },
+  {
+    id: 'pa', mapName: 'Panama', name: '巴拿马', nameEn: 'Panama', flag: '🇵🇦',
+    lat: 8.5, lon: -80.0,
+    enterprises: [
+      { name: '巴拿马运河管理局', nameEn: 'Panama Canal Authority', category: '机械', desc: '巴拿马运河运营方，船闸、航道与水资源管理系统工程。', website: 'https://www.pancanal.com' },
+      { name: 'Copa 航空', nameEn: 'Copa Airlines', category: '机械', desc: '巴拿马国际航空公司，美洲枢纽航线网络覆盖广泛。', website: 'https://www.copaair.com' },
+      { name: 'ETESA', nameEn: 'ETESA', category: '电气', desc: '巴拿马输电与电力交易公司，国家电网调度运营。', website: 'https://www.etesa.com.pa' },
+    ],
+  },
+  {
+    id: 'ni', mapName: 'Nicaragua', name: '尼加拉瓜', nameEn: 'Nicaragua', flag: '🇳🇮',
+    lat: 12.8, lon: -85.0,
+    enterprises: [
+      { name: 'ENEL 尼加拉瓜', nameEn: 'ENEL Nicaragua', category: '电气', desc: '尼加拉瓜发电与配电企业，地热、风电与水电资产组合。', website: 'https://www.enel.com' },
+      { name: 'Claro 尼加拉瓜', nameEn: 'Claro Nicaragua', category: '计算机', desc: '尼加拉瓜主要电信运营商，移动与宽带网络服务。', website: 'https://www.claro.com.ni' },
+      { name: 'Holcim 尼加拉瓜', nameEn: 'Holcim Nicaragua', category: '机械', desc: '尼加拉瓜水泥制造企业，供应国内基建与住宅市场。', website: 'https://www.holcim.com.ni' },
+    ],
+  },
+  {
+    id: 'jm', mapName: 'Jamaica', name: '牙买加', nameEn: 'Jamaica', flag: '🇯🇲',
+    lat: 18.0, lon: -77.3, hideLabel: true,
+    enterprises: [
+      { name: 'JPS', nameEn: 'Jamaica Public Service', category: '电气', desc: '牙买加电力公司，发电、输电与配电一体化运营。', website: 'https://www.jpsco.com' },
+      { name: 'Digicel 牙买加', nameEn: 'Digicel Jamaica', category: '计算机', desc: '牙买加最大移动运营商，通信网络与数字金融服务。', website: 'https://www.digicelgroup.com' },
+      { name: 'Noranda 铝土矿', nameEn: 'Noranda Bauxite', category: '机械', desc: '牙买加铝土矿开采与氧化铝生产企业，出口全球市场。', website: 'https://www.norandabauxite.com' },
+    ],
+  },
+  {
+    id: 'sv', mapName: 'El Salvador', name: '萨尔瓦多', nameEn: 'El Salvador', flag: '🇸🇻',
+    lat: 13.8, lon: -88.9,
+    enterprises: [
+      { name: 'CEL', nameEn: 'CEL', category: '电气', desc: '萨尔瓦多国有水电公司，水电站与地热发电运营。', website: 'https://www.cel.gob.sv' },
+      { name: 'Tigo 萨尔瓦多', nameEn: 'Tigo El Salvador', category: '计算机', desc: '萨尔瓦多最大移动运营商，网络覆盖与数字服务。', website: 'https://www.tigo.com.sv' },
+      { name: 'Holcim 萨尔瓦多', nameEn: 'Holcim El Salvador', category: '机械', desc: '萨尔瓦多水泥制造企业，供应中美洲建筑市场。', website: 'https://www.holcim.com.sv' },
+    ],
+  },
+  {
+    id: 'fj', mapName: 'Fiji', name: '斐济', nameEn: 'Fiji', flag: '🇫🇯',
+    lat: -17.8, lon: 178.0,
+    enterprises: [
+      { name: 'Energy Fiji', nameEn: 'Energy Fiji Limited', category: '电气', desc: '斐济国家电力公司，水电、柴油与太阳能发电及配电运营。', website: 'https://www.efl.com.fj' },
+      { name: 'Vodafone 斐济', nameEn: 'Vodafone Fiji', category: '计算机', desc: '斐济最大移动运营商，通信网络与数字金融服务。', website: 'https://www.vodafone.com.fj' },
+      { name: '斐济航空', nameEn: 'Fiji Airways', category: '机械', desc: '斐济国家航空公司，运营太平洋岛国与远程航线。', website: 'https://www.fijiairways.com' },
+    ],
+  },
+  {
+    id: 'pg', mapName: 'Papua New Guinea', name: '巴布亚新几内亚', nameEn: 'Papua New Guinea', flag: '🇵🇬',
+    lat: -6.0, lon: 145.0,
+    enterprises: [
+      { name: 'PNG Power', nameEn: 'PNG Power', category: '电气', desc: '巴布亚新几内亚国有电力公司，发电、输电与配电运营。', website: 'https://www.pngpower.com.pg' },
+      { name: 'Digicel 巴新', nameEn: 'Digicel PNG', category: '计算机', desc: '巴布亚新几内亚主要移动运营商，通信网络覆盖城乡。', website: 'https://www.digicelgroup.com' },
+      { name: 'Lihir 金矿', nameEn: 'Newcrest Lihir', category: '机械', desc: '巴新 Lihir 大型金矿运营方，露天开采与高压氧化选冶。', website: 'https://www.newcrest.com' },
+    ],
+  },
 ]
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
-
-/* Natural Earth 名称 -> SVG path，用于高亮国家级轮廓 */
-const PATH_BY_NAME = new Map(WORLD_COUNTRY_PATHS.map(c => [c.name, c.d]))
 
 /** 注册 / 资料编辑时的国家下拉选项（与地图节点保持一致） */
 export const COUNTRY_OPTIONS = COUNTRIES.map(c => ({ id: c.id, name: c.name, flag: c.flag }))
@@ -820,8 +1632,6 @@ export default function WorldMap({ onClose, users }: WorldMapProps) {
     () => COUNTRIES.find(c => c.id === selectedId) ?? null,
     [selectedId]
   )
-
-  const dotOf = (c: Country) => ({ x: px(c.lon), y: py(c.lat) })
 
   // Group enterprises by category for the detail panel
   const grouped = useMemo(() => {
@@ -867,91 +1677,15 @@ export default function WorldMap({ onClose, users }: WorldMapProps) {
             <div className="wm-grid-bg" />
             <div className="wm-vignette" />
 
-            <svg
-              className="wm-svg"
-              viewBox="0 0 1000 500"
-              preserveAspectRatio="xMidYMid meet"
-              role="img"
-              aria-label="世界地图"
-            >
-              {/* Standard world map — Natural Earth country outlines */}
-              {WORLD_COUNTRY_PATHS.map(c => (
-                <path key={c.name} d={c.d} className="wm-continent" />
-              ))}
-
-              {/* Network links */}
-              {LINKS.map(([a, b], i) => {
-                const ca = COUNTRIES.find(c => c.id === a)
-                const cb = COUNTRIES.find(c => c.id === b)
-                if (!ca || !cb) return null
-                const pa = dotOf(ca)
-                const pb = dotOf(cb)
-                return (
-                  <line
-                    key={`link-${i}`}
-                    x1={pa.x}
-                    y1={pa.y}
-                    x2={pb.x}
-                    y2={pb.y}
-                    className="wm-link"
-                  />
-                )
-              })}
-
-              {/* Highlighted (clickable) countries */}
-              {COUNTRIES.map(c => {
-                const d = PATH_BY_NAME.get(c.mapName)
-                if (!d) return null
-                const isSel = c.id === selectedId
-                const isHover = c.id === hoverId
-                const cls = [
-                  'wm-country',
-                  isSel ? 'wm-country-sel' : '',
-                  isHover && !isSel ? 'wm-country-hover' : '',
-                ].join(' ').trim()
-                return (
-                  <path
-                    key={c.id}
-                    d={d}
-                    className={cls}
-                    onClick={() => setSelectedId(c.id)}
-                    onMouseEnter={() => setHoverId(c.id)}
-                    onMouseLeave={() => setHoverId(null)}
-                  >
-                    <title>{c.name} · {c.nameEn}</title>
-                  </path>
-                )
-              })}
-
-              {/* Pulsing dots + labels */}
-              {COUNTRIES.map((c, i) => {
-                const isSel = c.id === selectedId
-                const p = dotOf(c)
-                return (
-                  <g key={`dot-${c.id}`} className="wm-node-group" style={{ animationDelay: `${(i % 5) * 0.4}s` }}>
-                    <circle cx={p.x} cy={p.y} r="6" className={`wm-dot-ring ${isSel ? 'wm-dot-ring-sel' : ''}`} />
-                    <circle
-                      cx={p.x} cy={p.y} r="2.4"
-                      className={`wm-dot-core ${isSel ? 'wm-dot-core-sel' : ''}`}
-                      onClick={() => setSelectedId(c.id)}
-                      style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-                    >
-                      <title>{c.name}</title>
-                    </circle>
-                    {!c.hideLabel && (
-                      <text
-                        x={c.labelX ?? 0}
-                        y={c.labelY ?? 0}
-                        textAnchor={c.labelAnchor ?? 'middle'}
-                        className={`wm-country-label ${isSel ? 'wm-country-label-sel' : ''}`}
-                      >
-                        {c.name}
-                      </text>
-                    )}
-                  </g>
-                )
-              })}
-            </svg>
+            <GlobeCanvas
+              countries={COUNTRIES}
+              paths={WORLD_COUNTRY_PATHS}
+              links={LINKS}
+              selectedId={selectedId}
+              hoverId={hoverId}
+              onSelect={setSelectedId}
+              onHover={setHoverId}
+            />
 
             {/* Legend */}
             <div className="wm-legend">
@@ -965,7 +1699,7 @@ export default function WorldMap({ onClose, users }: WorldMapProps) {
               <span className="wm-legend-item">
                 <i className="wm-swatch wm-swatch-sel" />已选中
               </span>
-              <span className="wm-legend-coord">EQUIRECTANGULAR · NATURAL EARTH 1:50m</span>
+              <span className="wm-legend-coord">3D HOLOGRAM · NATURAL EARTH 1:50m</span>
             </div>
           </div>
 
