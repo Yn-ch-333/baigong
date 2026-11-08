@@ -46,6 +46,17 @@ export interface Category {
   moderatorName?: string
 }
 
+/** 工业电台曲目（音频文件由后端 KV 提供） */
+export interface RadioTrack {
+  id: string
+  title: string
+  artist: string
+  uploaderId?: string
+  uploaderName?: string
+  size?: number
+  createdAt?: string
+}
+
 export interface Comment {
   id: string
   postId: string

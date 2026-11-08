@@ -303,6 +303,19 @@
   min-width: 0;
 }
 
+.music-list-artist {
+  color: var(--fg-3);
+  font-size: 10px;
+}
+
+.music-empty {
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--fg-3);
+  line-height: 1.6;
+}
+
 .music-list-item.active .music-list-name {
   color: var(--fg);
 }

@@ -1,65 +1,66 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { IconClose } from '../icons'
+import type { RadioTrack, User } from '../types'
+import { fetchTracks, uploadTrack, deleteTrack } from '../api'
 import './MusicPlayer.css'
 
-export interface Track {
-  id: string
-  title: string
-  artist: string
-  src: string
-}
-
 interface MusicPlayerProps {
-  isAdmin?: boolean
+  user: User | null
 }
 
-const DEFAULT_TRACKS: Track[] = [
-  { id: 't1', title: '工厂之声', artist: '工业氛围', src: '' },
-  { id: 't2', title: '齿轮律动', artist: '机械节拍', src: '' },
-]
+const MAX_FILE_SIZE = 20 * 1024 * 1024
 
-export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
+export default function MusicPlayer({ user }: MusicPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [tracks, setTracks] = useState<Track[]>(() => {
-    const saved = localStorage.getItem('baigong-tracks')
-    if (saved) {
-      try {
-        return JSON.parse(saved)
-      } catch {
-        return DEFAULT_TRACKS
-      }
-    }
-    return DEFAULT_TRACKS
-  })
+  const [tracks, setTracks] = useState<RadioTrack[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
-  const current = tracks[currentIndex] || tracks[0]
+  const current = tracks[currentIndex]
+  const currentSrc = current ? `/api/tracks/${current.id}/audio` : undefined
+
+  const loadTracks = useCallback(async () => {
+    try {
+      const { tracks: list } = await fetchTracks()
+      setTracks(list)
+      setCurrentIndex(i => (list.length ? Math.min(i, list.length - 1) : 0))
+    } catch {
+      setError('曲目加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // 首次加载；展开面板时刷新，确保能听到别人新上传的曲目
+  useEffect(() => {
+    loadTracks()
+  }, [loadTracks])
 
   useEffect(() => {
-    localStorage.setItem('baigong-tracks', JSON.stringify(tracks))
-  }, [tracks])
+    if (expanded) loadTracks()
+  }, [expanded, loadTracks])
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio || !current) return
     if (isPlaying) {
       audio.pause()
       setIsPlaying(false)
     } else {
-      if (audio.src && audio.src !== window.location.href) {
-        audio.play().then(() => setIsPlaying(true)).catch(() => setError('无法播放'))
-      }
+      audio.play().then(() => setIsPlaying(true)).catch(() => setError('无法播放'))
     }
-  }, [isPlaying])
+  }, [isPlaying, current])
 
   const playTrack = useCallback((index: number) => {
+    if (!tracks[index]) return
     setCurrentIndex(index)
     setIsPlaying(true)
     setError('')
@@ -71,17 +72,17 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
           setError('无法播放该曲目')
         })
       }
-    }, 50)
-  }, [])
+    }, 80)
+  }, [tracks])
 
   const handleNext = useCallback(() => {
-    const next = (currentIndex + 1) % tracks.length
-    playTrack(next)
+    if (!tracks.length) return
+    playTrack((currentIndex + 1) % tracks.length)
   }, [currentIndex, tracks.length, playTrack])
 
   const handlePrev = useCallback(() => {
-    const prev = (currentIndex - 1 + tracks.length) % tracks.length
-    playTrack(prev)
+    if (!tracks.length) return
+    playTrack((currentIndex - 1 + tracks.length) % tracks.length)
   }, [currentIndex, tracks.length, playTrack])
 
   const handleTimeUpdate = useCallback(() => {
@@ -106,43 +107,63 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
     setProgress(value)
   }, [duration])
 
-  const handleFileImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    if (fileInputRef.current) fileInputRef.current.value = ''
     if (!file) return
     if (!file.type.startsWith('audio/')) {
       setError('仅支持音频文件')
       return
     }
-    const url = URL.createObjectURL(file)
-    const title = file.name.replace(/\.[^/.]+$/, '')
-    const newTrack: Track = {
-      id: `track-${Date.now()}`,
-      title,
-      artist: '本地导入',
-      src: url,
+    if (file.size > MAX_FILE_SIZE) {
+      setError('音频不能超过 20MB')
+      return
     }
-    setTracks(prev => [...prev, newTrack])
-    setError('')
-    playTrack(tracks.length)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }, [tracks.length, playTrack])
+    try {
+      setUploading(true)
+      setError('')
+      const { track } = await uploadTrack(file)
+      const { tracks: list } = await fetchTracks()
+      setTracks(list)
+      const index = list.findIndex(t => t.id === track.id)
+      setCurrentIndex(index >= 0 ? index : 0)
+      setIsPlaying(true)
+      setTimeout(() => {
+        audioRef.current?.play().then(() => setIsPlaying(true)).catch(() => {
+          setIsPlaying(false)
+          setError('无法播放该曲目')
+        })
+      }, 80)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setUploading(false)
+    }
+  }, [])
 
-  const removeTrack = useCallback((index: number) => {
-    setTracks(prev => {
-      const next = [...prev]
-      const removed = next.splice(index, 1)[0]
-      if (removed?.src.startsWith('blob:')) {
-        URL.revokeObjectURL(removed.src)
+  const removeTrack = useCallback(async (index: number) => {
+    const track = tracks[index]
+    if (!track) return
+    if (!window.confirm(`确定删除「${track.title}」吗？`)) return
+    try {
+      await deleteTrack(track.id)
+      const { tracks: list } = await fetchTracks()
+      setTracks(list)
+      if (index === currentIndex) {
+        audioRef.current?.pause()
+        setIsPlaying(false)
+        setCurrentIndex(0)
+        setProgress(0)
+        setCurrentTime(0)
+        setDuration(0)
+      } else if (index < currentIndex) {
+        setCurrentIndex(i => i - 1)
       }
-      return next
-    })
-    if (index === currentIndex) {
-      setIsPlaying(false)
-      setCurrentIndex(0)
-    } else if (index < currentIndex) {
-      setCurrentIndex(i => i - 1)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败')
     }
-  }, [currentIndex])
+  }, [tracks, currentIndex])
 
   const formatTime = (s: number) => {
     if (!isFinite(s) || s < 0) return '0:00'
@@ -151,16 +172,19 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
+  const canDelete = (track: RadioTrack) =>
+    !!user && (track.uploaderId === user.id || user.role === 'admin')
+
   return (
     <div className={`music-player ${expanded ? 'expanded' : ''}`}>
       <audio
         ref={audioRef}
-        src={current?.src}
+        src={currentSrc}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMeta}
         onEnded={handleNext}
         onError={() => {
-          if (current?.src) setError('音频加载失败')
+          if (currentSrc) setError('音频加载失败')
         }}
       />
 
@@ -181,13 +205,14 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
         <div className="music-panel">
           <div className="music-head">
             <span className="music-title">工业电台</span>
-            {isAdmin && (
+            {user && (
               <button
                 className="music-import-btn"
                 onClick={() => fileInputRef.current?.click()}
-                title="导入歌曲"
+                title="上传音乐（音频 ≤ 20MB）"
+                disabled={uploading}
               >
-                +
+                {uploading ? '…' : '+'}
               </button>
             )}
             <input
@@ -208,7 +233,7 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
               </svg>
             </div>
             <div className="music-meta">
-              <div className="music-track-name">{current?.title || '无曲目'}</div>
+              <div className="music-track-name">{current?.title || '暂无曲目'}</div>
               <div className="music-track-artist">{current?.artist || '-'}</div>
             </div>
           </div>
@@ -230,17 +255,17 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
           </div>
 
           <div className="music-controls">
-            <button className="music-control-btn" onClick={handlePrev} aria-label="上一首">
+            <button className="music-control-btn" onClick={handlePrev} aria-label="上一首" disabled={!current}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
             </button>
-            <button className="music-play-btn" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>
+            <button className="music-play-btn" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'} disabled={!current}>
               {isPlaying ? (
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
               ) : (
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
               )}
             </button>
-            <button className="music-control-btn" onClick={handleNext} aria-label="下一首">
+            <button className="music-control-btn" onClick={handleNext} aria-label="下一首" disabled={!current}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
             </button>
           </div>
@@ -255,18 +280,27 @@ export default function MusicPlayer({ isAdmin }: MusicPlayerProps) {
                 onClick={() => playTrack(i)}
               >
                 <span className="music-list-index">{String(i + 1).padStart(2, '0')}</span>
-                <span className="music-list-name">{t.title}</span>
-                {isAdmin && tracks.length > 1 && (
+                <span className="music-list-name">
+                  {t.title}
+                  {t.artist && <span className="music-list-artist"> · {t.artist}</span>}
+                </span>
+                {canDelete(t) && (
                   <button
                     className="music-remove"
                     onClick={e => { e.stopPropagation(); removeTrack(i) }}
-                    aria-label="删除"
+                    aria-label={`删除 ${t.title}`}
                   >
                     <IconClose />
                   </button>
                 )}
               </div>
             ))}
+            {!loading && tracks.length === 0 && (
+              <div className="music-empty">
+                暂无曲目{user ? '，点击 + 上传第一首' : '，登录后可上传'}
+              </div>
+            )}
+            {loading && <div className="music-empty">加载中…</div>}
           </div>
         </div>
       )}

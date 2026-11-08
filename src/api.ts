@@ -1,5 +1,5 @@
 import type {
-  User, Post, Category, Comment, Message, WarehouseItem, Collection, Attachment,
+  User, Post, Category, Comment, Message, WarehouseItem, Collection, Attachment, RadioTrack,
 } from './types'
 
 const TOKEN_KEY = 'baigong-token'
@@ -188,4 +188,19 @@ export function uploadFile(file: File): Promise<Attachment> {
 
 export function deleteFile(id: string) {
   return request<{ ok: true }>(`/files/${id}`, { method: 'DELETE' })
+}
+
+export function fetchTracks() {
+  return request<{ tracks: RadioTrack[] }>('/tracks')
+}
+
+export function uploadTrack(file: File, title?: string) {
+  const fd = new FormData()
+  fd.append('file', file, file.name)
+  if (title) fd.append('title', title)
+  return request<{ track: RadioTrack }>('/tracks', { method: 'POST', body: fd })
+}
+
+export function deleteTrack(id: string) {
+  return request<{ ok: true }>(`/tracks/${id}`, { method: 'DELETE' })
 }

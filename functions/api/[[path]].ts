@@ -115,13 +115,14 @@ let schemaReady = false
 async function ensureSchema(env: Env): Promise<void> {
   if (schemaReady) return
   schemaReady = true
-  const alters = [
+  const statements = [
+    'CREATE TABLE IF NOT EXISTS tracks (id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT DEFAULT \'\', uploader_id TEXT, uploader_name TEXT DEFAULT \'\', mime TEXT DEFAULT \'audio/mpeg\', size INTEGER DEFAULT 0, created_at TEXT)',
     "ALTER TABLE users ADD COLUMN country TEXT DEFAULT ''",
     "ALTER TABLE categories ADD COLUMN description TEXT DEFAULT ''",
     'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
     'ALTER TABLE categories ADD COLUMN moderator_id TEXT',
   ]
-  for (const sql of alters) {
+  for (const sql of statements) {
     try {
       await env.DB.prepare(sql).run()
     } catch {
@@ -663,6 +664,111 @@ async function moveCategory(req: Request, env: Env, params: string[]): Promise<R
   return json({ categories: await loadCategories(env) })
 }
 
+// ---------- 工业电台：任何登录用户可上传，所有人可收听 ----------
+const TRACK_MAX_BYTES = 20 * 1024 * 1024
+
+function toTrack(r: any) {
+  return {
+    id: r.id,
+    title: r.title,
+    artist: r.artist || '',
+    uploaderId: r.uploader_id || '',
+    uploaderName: r.uploader_name || '',
+    size: r.size || 0,
+    createdAt: r.created_at || '',
+  }
+}
+
+async function loadTracks(env: Env) {
+  const rows = await env.DB.prepare(
+    'SELECT id, title, artist, uploader_id, uploader_name, size, created_at FROM tracks ORDER BY created_at DESC'
+  ).all<any>()
+  return (rows.results || []).map(toTrack)
+}
+
+async function listTracks(req: Request, env: Env): Promise<Response> {
+  return json({ tracks: await loadTracks(env) })
+}
+
+async function uploadTrack(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  let form: FormData
+  try {
+    form = await req.formData()
+  } catch {
+    return err('上传格式不正确', 400)
+  }
+  const entry = form.get('file')
+  if (!entry || typeof entry === 'string') return err('请选择音频文件', 400)
+  const file = entry as any
+  const mime = String(file.type || '')
+  if (!mime.startsWith('audio/')) return err('仅支持音频文件', 400)
+  if (Number(file.size) > TRACK_MAX_BYTES) return err('音频不能超过 20MB', 400)
+  const rawTitle = String(form.get('title') || '').trim() || String(file.name || '').replace(/\.\w+$/, '')
+  const title = rawTitle.slice(0, 60) || '未命名曲目'
+  const id = crypto.randomUUID()
+  const buffer: ArrayBuffer = await file.arrayBuffer()
+  await env.FILES.put(`music/${id}`, buffer, { metadata: { contentType: mime } })
+  await env.DB.prepare(
+    'INSERT INTO tracks (id, title, artist, uploader_id, uploader_name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind(id, title, u.name, u.id, u.name, mime, buffer.byteLength, new Date().toISOString())
+    .run()
+  const row = await env.DB.prepare('SELECT * FROM tracks WHERE id = ?').bind(id).first<any>()
+  return json({ track: toTrack(row) })
+}
+
+// 音频流：支持 Range，便于浏览器拖动进度条
+async function trackAudio(req: Request, env: Env, params: string[]): Promise<Response> {
+  const obj = await env.FILES.getWithMetadata(`music/${params[0]}`, { type: 'arrayBuffer' })
+  if (!obj.value) return new Response('Not found', { status: 404 })
+  const buffer = obj.value
+  const total = buffer.byteLength
+  const mime = obj.metadata?.contentType || 'audio/mpeg'
+  const headers: Record<string, string> = {
+    'Content-Type': mime,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'public, max-age=31536000, immutable',
+  }
+  const range = req.headers.get('Range')
+  if (range) {
+    const match = /bytes=(\d*)-(\d*)/.exec(range)
+    if (match) {
+      let start = match[1] ? parseInt(match[1], 10) : 0
+      let end = match[2] ? parseInt(match[2], 10) : total - 1
+      if (start >= total) {
+        return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${total}` } })
+      }
+      end = Math.min(end, total - 1)
+      const chunk = buffer.slice(start, end + 1)
+      return new Response(chunk, {
+        status: 206,
+        headers: {
+          ...headers,
+          'Content-Length': String(end - start + 1),
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+        },
+      })
+    }
+  }
+  return new Response(buffer, { headers: { ...headers, 'Content-Length': String(total) } })
+}
+
+// 删除曲目：上传者本人或全局管理员
+async function deleteTrack(req: Request, env: Env, params: string[]): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const row = await env.DB.prepare('SELECT uploader_id FROM tracks WHERE id = ?')
+    .bind(params[0])
+    .first<{ uploader_id: string | null }>()
+  if (!row) return err('曲目不存在', 404)
+  if (row.uploader_id !== u.id && u.role !== 'admin') return err('无权删除该曲目', 403)
+  await env.FILES.delete(`music/${params[0]}`)
+  await env.DB.prepare('DELETE FROM tracks WHERE id = ?').bind(params[0]).run()
+  return json({ ok: true })
+}
+
 async function banUser(req: Request, env: Env, params: string[]): Promise<Response> {
   const u = await requireUser(req, env, true)
   if (u instanceof Response) return u
@@ -923,6 +1029,10 @@ const routes: Array<[string, string, Handler]> = [
   ['POST', 'files', (req, env) => uploadFile(req, env)],
   ['GET', 'files/*', (req, env, p, url) => getFile(req, env, p, url)],
   ['DELETE', 'files/*', (req, env, p) => deleteFile(req, env, p)],
+  ['GET', 'tracks', (req, env) => listTracks(req, env)],
+  ['POST', 'tracks', (req, env) => uploadTrack(req, env)],
+  ['GET', 'tracks/*/audio', (req, env, p) => trackAudio(req, env, p)],
+  ['DELETE', 'tracks/*', (req, env, p) => deleteTrack(req, env, p)],
 ]
 
 export async function onRequest(ctx: EventContext): Promise<Response> {

@@ -94,3 +94,14 @@ CREATE TABLE IF NOT EXISTS files (
   created_at INTEGER,
   post_id TEXT
 );
+
+CREATE TABLE IF NOT EXISTS tracks (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  artist TEXT DEFAULT '',
+  uploader_id TEXT,
+  uploader_name TEXT DEFAULT '',
+  mime TEXT DEFAULT 'audio/mpeg',
+  size INTEGER DEFAULT 0,
+  created_at TEXT
+);

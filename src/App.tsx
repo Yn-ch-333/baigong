@@ -482,7 +482,7 @@ function App() {
           onClose={() => setThemeOpen(false)}
         />
       )}
-      <MusicPlayer isAdmin={user?.role === 'admin'} />
+      <MusicPlayer user={user} />
     </>
   )
 }
