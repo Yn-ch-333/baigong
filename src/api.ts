@@ -111,10 +111,31 @@ export function toggleCollect(postId: string) {
   return request<{ collected: boolean }>(`/posts/${postId}/collect`, { method: 'POST' })
 }
 
-export function addCategory(name: string) {
+export function addCategory(name: string, description?: string) {
   return request<{ category: Category }>('/categories', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, description }),
+  })
+}
+
+export function updateCategory(id: string, data: { name?: string; description?: string }) {
+  return request<{ category: Category }>(`/categories/${id}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function setCategoryModerator(id: string, userId: string | null) {
+  return request<{ category: Category }>(`/categories/${id}/moderator`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  })
+}
+
+export function moveCategory(id: string, direction: 'up' | 'down') {
+  return request<{ categories: Category[] }>(`/categories/${id}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ direction }),
   })
 }
 

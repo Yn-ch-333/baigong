@@ -110,15 +110,23 @@ function getToken(req: Request): string {
   return auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
 }
 
-// 线上库结构自愈：确保 users.country 列存在（每个实例只尝试一次）
-let countryColumnReady = false
-async function ensureCountryColumn(env: Env): Promise<void> {
-  if (countryColumnReady) return
-  countryColumnReady = true
-  try {
-    await env.DB.prepare("ALTER TABLE users ADD COLUMN country TEXT DEFAULT ''").run()
-  } catch {
-    // 列已存在时 SQLite 会报 duplicate column name，忽略即可
+// 线上库结构自愈：确保 users.country 与板块扩展列存在（每个实例只尝试一次）
+let schemaReady = false
+async function ensureSchema(env: Env): Promise<void> {
+  if (schemaReady) return
+  schemaReady = true
+  const alters = [
+    "ALTER TABLE users ADD COLUMN country TEXT DEFAULT ''",
+    "ALTER TABLE categories ADD COLUMN description TEXT DEFAULT ''",
+    'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
+    'ALTER TABLE categories ADD COLUMN moderator_id TEXT',
+  ]
+  for (const sql of alters) {
+    try {
+      await env.DB.prepare(sql).run()
+    } catch {
+      // 列已存在时 SQLite 会报 duplicate column name，忽略即可
+    }
   }
 }
 
@@ -247,6 +255,60 @@ function toCollection(r: any) {
   return { id: r.id, userId: r.user_id, postId: r.post_id, date: r.date || '' }
 }
 
+/** 板块列表（含帖子数、简介与板块管理员） */
+async function loadCategories(env: Env) {
+  const cats = await env.DB.prepare('SELECT * FROM categories ORDER BY sort_order ASC, name ASC').all<any>()
+  const counts = await env.DB.prepare('SELECT category, COUNT(*) AS c FROM posts GROUP BY category').all<any>()
+  const us = await env.DB.prepare('SELECT id, name FROM users').all<any>()
+  const countByName = new Map<string, number>()
+  for (const r of counts.results || []) countByName.set(r.category, r.c)
+  const nameById = new Map<string, string>()
+  for (const r of us.results || []) nameById.set(r.id, r.name)
+  return (cats.results || []).map(c => ({
+    id: c.id,
+    name: c.name,
+    count: countByName.get(c.name) || 0,
+    description: c.description || '',
+    moderatorId: c.moderator_id || '',
+    moderatorName: c.moderator_id ? (nameById.get(c.moderator_id) || '') : '',
+  }))
+}
+
+/** 单个板块完整信息（用于增改接口返回） */
+async function categoryPayload(env: Env, c: any) {
+  const count = await env.DB.prepare('SELECT COUNT(*) AS c FROM posts WHERE category = ?')
+    .bind(c.name)
+    .first<{ c: number }>()
+  let moderatorName = ''
+  if (c.moderator_id) {
+    const row = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(c.moderator_id).first<{ name: string }>()
+    moderatorName = row?.name || ''
+  }
+  return {
+    id: c.id,
+    name: c.name,
+    count: count?.c || 0,
+    description: c.description || '',
+    moderatorId: c.moderator_id || '',
+    moderatorName,
+  }
+}
+
+/** 是否为本板块的管理员 */
+async function canModerateCategory(env: Env, userId: string, categoryName: string): Promise<boolean> {
+  if (!categoryName) return false
+  const row = await env.DB.prepare('SELECT id FROM categories WHERE name = ? AND moderator_id = ?')
+    .bind(categoryName, userId)
+    .first()
+  return !!row
+}
+
+/** 管理帖子/评论的权限：全局管理员或该板块管理员 */
+async function canModeratePost(env: Env, user: UserRow, category: string | null | undefined): Promise<boolean> {
+  if (user.role === 'admin') return true
+  return canModerateCategory(env, user.id, category || '')
+}
+
 async function loadPost(env: Env, id: string) {
   const row = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
   if (!row) return null
@@ -301,7 +363,7 @@ async function bootstrap(req: Request, env: Env): Promise<Response> {
   const user = await getUser(req, env)
 
   const users = await env.DB.prepare('SELECT * FROM users').all<UserRow>()
-  const cats = await env.DB.prepare('SELECT * FROM categories').all<any>()
+  const cats = await env.DB.prepare('SELECT * FROM categories ORDER BY sort_order ASC, name ASC').all<any>()
   const posts = await env.DB.prepare('SELECT * FROM posts ORDER BY pinned DESC, date DESC').all<any>()
   const comments = await env.DB.prepare('SELECT * FROM comments ORDER BY date ASC').all<any>()
   const warehouse = await env.DB.prepare('SELECT * FROM warehouse').all<any>()
@@ -319,6 +381,8 @@ async function bootstrap(req: Request, env: Env): Promise<Response> {
   for (const r of counts.results || []) countByPost.set(r.post_id, r.c)
   const countByCat = new Map<string, number>()
   for (const p of posts.results || []) countByCat.set(p.category, (countByCat.get(p.category) || 0) + 1)
+  const userNameById = new Map<string, string>()
+  for (const r of users.results || []) userNameById.set(r.id, r.name)
 
   let messages: any[] = []
   let collections: any[] = []
@@ -336,7 +400,14 @@ async function bootstrap(req: Request, env: Env): Promise<Response> {
   return json({
     me: user ? toUser(user) : null,
     users: (users.results || []).map(toUser),
-    categories: (cats.results || []).map(c => ({ id: c.id, name: c.name, count: countByCat.get(c.name) || 0 })),
+    categories: (cats.results || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      count: countByCat.get(c.name) || 0,
+      description: c.description || '',
+      moderatorId: c.moderator_id || '',
+      moderatorName: c.moderator_id ? (userNameById.get(c.moderator_id) || '') : '',
+    })),
     posts: (posts.results || []).map(p => toPost(p, countByPost.get(p.id) || 0, filesByPost.get(p.id) || [])),
     comments: (comments.results || []).map(toComment),
     warehouse: (warehouse.results || []).map(toWarehouseItem),
@@ -378,7 +449,7 @@ async function deletePost(req: Request, env: Env, params: string[]): Promise<Res
   const id = params[0]
   const row = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
   if (!row) return err('帖子不存在', 404)
-  if (row.author_id !== u.id && u.role !== 'admin') return err('无权删除该帖子', 403)
+  if (row.author_id !== u.id && !(await canModeratePost(env, u, row.category))) return err('无权删除该帖子', 403)
   const files = await env.DB.prepare('SELECT id FROM files WHERE post_id = ?').bind(id).all<{ id: string }>()
   for (const f of files.results || []) {
     try {
@@ -397,11 +468,14 @@ async function deletePost(req: Request, env: Env, params: string[]): Promise<Res
 }
 
 async function pinPost(req: Request, env: Env, params: string[]): Promise<Response> {
-  const u = await requireUser(req, env, true)
+  const u = await requireUser(req, env)
   if (u instanceof Response) return u
   const id = params[0]
-  const row = await env.DB.prepare('SELECT pinned FROM posts WHERE id = ?').bind(id).first<{ pinned: number }>()
+  const row = await env.DB.prepare('SELECT pinned, category FROM posts WHERE id = ?')
+    .bind(id)
+    .first<{ pinned: number; category: string | null }>()
   if (!row) return err('帖子不存在', 404)
+  if (!(await canModeratePost(env, u, row.category))) return err('无权置顶该板块的帖子', 403)
   await env.DB.prepare('UPDATE posts SET pinned = ? WHERE id = ?').bind(row.pinned ? 0 : 1, id).run()
   return json({ post: await loadPost(env, id) })
 }
@@ -452,9 +526,13 @@ async function deleteComment(req: Request, env: Env, params: string[]): Promise<
   const u = await requireUser(req, env)
   if (u instanceof Response) return u
   const id = params[0]
-  const row = await env.DB.prepare('SELECT id, post_id, author_id FROM comments WHERE id = ?').bind(id).first<any>()
+  const row = await env.DB.prepare(
+    'SELECT c.id, c.post_id, c.author_id, p.category FROM comments c LEFT JOIN posts p ON p.id = c.post_id WHERE c.id = ?'
+  )
+    .bind(id)
+    .first<any>()
   if (!row) return err('评论不存在', 404)
-  if (row.author_id !== u.id && u.role !== 'admin') return err('无权删除该评论', 403)
+  if (row.author_id !== u.id && !(await canModeratePost(env, u, row.category))) return err('无权删除该评论', 403)
   const tree = await env.DB.prepare(
     'WITH RECURSIVE sub(id) AS (' +
       'SELECT id FROM comments WHERE id = ? ' +
@@ -497,18 +575,92 @@ async function createCategory(req: Request, env: Env): Promise<Response> {
   const body = await parseBody(req)
   const name = String(body.name || '').trim()
   if (!name) return err('板块名称不能为空', 400)
+  if (name.length > 20) return err('板块名称最多 20 个字符', 400)
+  const description = String(body.description || '').trim().slice(0, 120)
   const exists = await env.DB.prepare('SELECT id FROM categories WHERE name = ?').bind(name).first()
   if (exists) return err('板块已存在', 409)
-  const category = { id: crypto.randomUUID(), name, count: 0 }
-  await env.DB.prepare('INSERT INTO categories (id, name) VALUES (?, ?)').bind(category.id, name).run()
-  return json({ category })
+  const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM categories').first<{ m: number }>()
+  const id = crypto.randomUUID()
+  await env.DB.prepare('INSERT INTO categories (id, name, description, sort_order) VALUES (?, ?, ?, ?)')
+    .bind(id, name, description, (max?.m ?? -1) + 1)
+    .run()
+  return json({ category: await categoryPayload(env, { id, name, description, moderator_id: '' }) })
+}
+
+// 修改板块：全局管理员，或该板块管理员（板块管理员只能改自己板块的名称与简介）
+async function updateCategory(req: Request, env: Env, params: string[]): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const cat = await env.DB.prepare('SELECT * FROM categories WHERE id = ?').bind(params[0]).first<any>()
+  if (!cat) return err('板块不存在', 404)
+  if (u.role !== 'admin' && cat.moderator_id !== u.id) return err('无权修改该板块', 403)
+  const body = await parseBody(req)
+  const name = body.name !== undefined ? String(body.name).trim() : cat.name
+  if (!name) return err('板块名称不能为空', 400)
+  if (name.length > 20) return err('板块名称最多 20 个字符', 400)
+  if (name !== cat.name) {
+    const dup = await env.DB.prepare('SELECT id FROM categories WHERE name = ?').bind(name).first()
+    if (dup) return err('板块已存在', 409)
+  }
+  const description = body.description !== undefined
+    ? String(body.description).trim().slice(0, 120)
+    : (cat.description || '')
+  const batch = [env.DB.prepare('UPDATE categories SET name = ?, description = ? WHERE id = ?').bind(name, description, cat.id)]
+  if (name !== cat.name) {
+    batch.push(env.DB.prepare('UPDATE posts SET category = ? WHERE category = ?').bind(name, cat.name))
+  }
+  await env.DB.batch(batch)
+  return json({ category: await categoryPayload(env, { ...cat, name, description }) })
 }
 
 async function deleteCategory(req: Request, env: Env, params: string[]): Promise<Response> {
   const u = await requireUser(req, env, true)
   if (u instanceof Response) return u
-  await env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(params[0]).run()
+  const cat = await env.DB.prepare('SELECT id, name FROM categories WHERE id = ?').bind(params[0]).first<any>()
+  if (!cat) return err('板块不存在', 404)
+  const cnt = await env.DB.prepare('SELECT COUNT(*) AS c FROM posts WHERE category = ?')
+    .bind(cat.name)
+    .first<{ c: number }>()
+  const n = cnt?.c || 0
+  if (n > 0) return err(`该板块下还有 ${n} 篇帖子，请先删除或转移帖子后再删除板块`, 400)
+  await env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(cat.id).run()
   return json({ ok: true })
+}
+
+// 指定 / 取消板块管理员（仅全局管理员）
+async function setCategoryModerator(req: Request, env: Env, params: string[]): Promise<Response> {
+  const u = await requireUser(req, env, true)
+  if (u instanceof Response) return u
+  const cat = await env.DB.prepare('SELECT * FROM categories WHERE id = ?').bind(params[0]).first<any>()
+  if (!cat) return err('板块不存在', 404)
+  const body = await parseBody(req)
+  const userId = String(body.userId || '').trim()
+  if (userId) {
+    const target = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first()
+    if (!target) return err('用户不存在', 404)
+  }
+  await env.DB.prepare('UPDATE categories SET moderator_id = ? WHERE id = ?').bind(userId, cat.id).run()
+  return json({ category: await categoryPayload(env, { ...cat, moderator_id: userId }) })
+}
+
+// 调整板块顺序：全局管理员，direction = up | down
+async function moveCategory(req: Request, env: Env, params: string[]): Promise<Response> {
+  const u = await requireUser(req, env, true)
+  if (u instanceof Response) return u
+  const rows = (await env.DB.prepare('SELECT id FROM categories ORDER BY sort_order ASC, name ASC').all<{ id: string }>())
+    .results || []
+  const idx = rows.findIndex(r => r.id === params[0])
+  if (idx < 0) return err('板块不存在', 404)
+  const body = await parseBody(req)
+  const j = String(body.direction) === 'up' ? idx - 1 : idx + 1
+  if (j < 0 || j >= rows.length) return json({ categories: await loadCategories(env) })
+  // 先按当前展示顺序规范化 sort_order，再交换相邻两项
+  const batch = rows.map((r, i) => (
+    env.DB.prepare('UPDATE categories SET sort_order = ? WHERE id = ?')
+      .bind(i === idx ? j : i === j ? idx : i, r.id)
+  ))
+  await env.DB.batch(batch)
+  return json({ categories: await loadCategories(env) })
 }
 
 async function banUser(req: Request, env: Env, params: string[]): Promise<Response> {
@@ -756,6 +908,9 @@ const routes: Array<[string, string, Handler]> = [
   ['DELETE', 'comments/*', (req, env, p) => deleteComment(req, env, p)],
   ['POST', 'posts/*/collect', (req, env, p) => collectPost(req, env, p)],
   ['POST', 'categories', (req, env) => createCategory(req, env)],
+  ['POST', 'categories/*', (req, env, p) => updateCategory(req, env, p)],
+  ['POST', 'categories/*/moderator', (req, env, p) => setCategoryModerator(req, env, p)],
+  ['POST', 'categories/*/move', (req, env, p) => moveCategory(req, env, p)],
   ['DELETE', 'categories/*', (req, env, p) => deleteCategory(req, env, p)],
   ['POST', 'users/me', (req, env) => updateMe(req, env)],
   ['POST', 'users/*/ban', (req, env, p) => banUser(req, env, p)],
@@ -776,7 +931,7 @@ export async function onRequest(ctx: EventContext): Promise<Response> {
     const url = new URL(request.url)
     const seg = url.pathname.split('/').filter(Boolean)
     if (seg[0] !== 'api') return err('接口不存在', 404)
-    await ensureCountryColumn(env)
+    await ensureSchema(env)
     const path = seg.slice(1)
     const method = request.method.toUpperCase()
 

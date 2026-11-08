@@ -121,7 +121,9 @@ export default function Home({ posts, categories, users, onNavigate, onSelectCat
               >
                 <div className="item-meta">
                   <span className="item-tag">{c.name}</span>
-                  <span className="item-date">{c.count} 帖</span>
+                  <span className="item-date">
+                    {c.count} 帖{c.moderatorName ? ` · 管理员 ${c.moderatorName}` : ''}
+                  </span>
                 </div>
                 <div className="item-title">进入 {c.name} 板块</div>
               </article>

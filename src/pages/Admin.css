@@ -228,10 +228,43 @@
   font-size: 12px;
 }
 
+.admin-category-desc {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.admin-category-mod {
+  color: var(--brass);
+  font-size: 12px;
+}
+
+.admin-category-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.category-card .admin-card-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.category-card .admin-mod-select {
+  width: auto;
+  max-width: 150px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
 .admin-add-bar {
   display: flex;
   gap: 8px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .admin-add-input {

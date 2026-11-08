@@ -221,16 +221,37 @@ function App() {
     }).catch(err => console.error('封禁操作失败', err))
   }, [])
 
-  const handleAddCategory = useCallback((name: string) => {
-    api.addCategory(name).then(({ category }) => {
-      setCategories(prev => [...prev, category])
-    }).catch(err => console.error('新增板块失败', err))
+  const handleAddCategory = useCallback(async (name: string, description?: string) => {
+    const { category } = await api.addCategory(name, description)
+    setCategories(prev => [...prev, category])
   }, [])
 
-  const handleDeleteCategory = useCallback((categoryId: string) => {
-    api.deleteCategory(categoryId).then(() => {
-      setCategories(prev => prev.filter(c => c.id !== categoryId))
-    }).catch(err => console.error('删除板块失败', err))
+  const handleUpdateCategory = useCallback(async (
+    categoryId: string,
+    data: { name?: string; description?: string },
+  ) => {
+    const oldName = categories.find(c => c.id === categoryId)?.name
+    const { category } = await api.updateCategory(categoryId, data)
+    setCategories(prev => prev.map(c => (c.id === categoryId ? category : c)))
+    if (oldName && category.name !== oldName) {
+      setPosts(prev => prev.map(p => (p.category === oldName ? { ...p, category: category.name } : p)))
+      setSelectedCategory(prev => (prev === oldName ? category.name : prev))
+    }
+  }, [categories])
+
+  const handleSetCategoryModerator = useCallback(async (categoryId: string, userId: string | null) => {
+    const { category } = await api.setCategoryModerator(categoryId, userId)
+    setCategories(prev => prev.map(c => (c.id === categoryId ? category : c)))
+  }, [])
+
+  const handleMoveCategory = useCallback(async (categoryId: string, direction: 'up' | 'down') => {
+    const { categories: list } = await api.moveCategory(categoryId, direction)
+    setCategories(list)
+  }, [])
+
+  const handleDeleteCategory = useCallback(async (categoryId: string) => {
+    await api.deleteCategory(categoryId)
+    setCategories(prev => prev.filter(c => c.id !== categoryId))
   }, [])
 
   const handleSendMessage = useCallback((receiverId: string, content: string, fileId?: string) => {
@@ -324,6 +345,7 @@ function App() {
   }, [])
 
   const selectedPost = posts.find(p => p.id === selectedPostId)
+  const isModerator = !!user && categories.some(c => c.moderatorId === user.id)
 
   if (!entered) {
     return <Entry onEnter={() => { setEntered(true); setPage('home') }} />
@@ -343,6 +365,7 @@ function App() {
         onMessages={() => openMessages()}
         onOpenTheme={() => setThemeOpen(true)}
         isAdmin={user?.role === 'admin'}
+        isModerator={isModerator}
         theme={theme}
         onRegisterUser={handleRegisterUser}
       >
@@ -409,6 +432,9 @@ function App() {
             onTogglePin={handleTogglePin}
             onBanUser={handleBanUser}
             onAddCategory={handleAddCategory}
+            onUpdateCategory={handleUpdateCategory}
+            onSetCategoryModerator={handleSetCategoryModerator}
+            onMoveCategory={handleMoveCategory}
             onDeleteCategory={handleDeleteCategory}
             onThemeChange={setTheme}
             onThemeReset={() => setTheme(DEFAULT_THEME)}

@@ -75,6 +75,12 @@ export default function PostDetail({
 
   const rootComments = comments.filter(c => !c.parentId || !commentMap.has(c.parentId))
 
+  // 全局管理员或本板块管理员均可删除评论
+  const isBoardModerator = !!currentUser && categories.some(
+    c => c.name === post.category && c.moderatorId === currentUser.id
+  )
+  const canModerateComments = !!currentUser && (currentUser.role === 'admin' || isBoardModerator)
+
   const handleDeleteComment = async (c: Comment) => {
     if (!window.confirm('确定删除这条评论及其所有回复吗？')) return
     const ids = new Set<string>()
@@ -107,7 +113,7 @@ export default function PostDetail({
               onClick={() => setReplyTarget(c)}
             >回复</button>
           )}
-          {currentUser && (currentUser.role === 'admin' || c.authorId === currentUser.id) && (
+          {currentUser && (canModerateComments || c.authorId === currentUser.id) && (
             <button
               className="post-comment-delete-btn"
               onClick={() => handleDeleteComment(c)}
@@ -324,7 +330,9 @@ export default function PostDetail({
               >
                 <div className="item-meta">
                   <span className="item-tag">{c.name}</span>
-                  <span className="item-date">{c.count} 帖</span>
+                  <span className="item-date">
+                    {c.count} 帖{c.moderatorName ? ` · 管理员 ${c.moderatorName}` : ''}
+                  </span>
                 </div>
                 <div className="item-title">进入 {c.name} 板块</div>
               </article>

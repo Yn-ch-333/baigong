@@ -44,6 +44,8 @@ export default function PostList({
   const totalPages = Math.max(1, Math.ceil(filteredPosts.length / PAGE_SIZE))
   const pagedPosts = filteredPosts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
+  const currentCategory = categories.find(c => c.name === selectedCategory)
+
   const pinnedPosts = posts.filter(p => p.pinned).slice(0, 5)
 
   return (
@@ -57,6 +59,17 @@ export default function PostList({
           </h1>
           <span className="post-count">共 {filteredPosts.length} 帖</span>
         </div>
+
+        {currentCategory && (
+          <div className="post-board-info">
+            {currentCategory.description && (
+              <span className="post-board-desc">{currentCategory.description}</span>
+            )}
+            <span className="post-board-mod">
+              板块管理员：{currentCategory.moderatorName || '暂未设置'}
+            </span>
+          </div>
+        )}
 
         <div className="filter-bar">
           <button
@@ -192,7 +205,9 @@ export default function PostList({
               >
                 <div className="item-meta">
                   <span className="item-tag">{c.name}</span>
-                  <span className="item-date">{c.count} 帖</span>
+                  <span className="item-date">
+                    {c.count} 帖{c.moderatorName ? ` · 管理员 ${c.moderatorName}` : ''}
+                  </span>
                 </div>
                 <div className="item-title">进入 {c.name} 板块</div>
               </article>

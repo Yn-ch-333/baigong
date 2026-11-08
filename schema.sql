@@ -20,7 +20,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL
+  name TEXT UNIQUE NOT NULL,
+  description TEXT DEFAULT '',
+  sort_order INTEGER DEFAULT 0,
+  moderator_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS posts (

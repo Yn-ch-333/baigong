@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { User, Post, Category } from '../types'
 import {
   IconFilter, IconMessage, IconEye, IconShield,
@@ -17,8 +17,11 @@ interface AdminProps {
   onDeletePost: (postId: string) => void
   onTogglePin: (postId: string) => void
   onBanUser: (userId: string, banned: boolean) => void
-  onAddCategory: (name: string) => void
-  onDeleteCategory: (categoryId: string) => void
+  onAddCategory: (name: string, description?: string) => Promise<void>
+  onUpdateCategory: (categoryId: string, data: { name?: string; description?: string }) => Promise<void>
+  onSetCategoryModerator: (categoryId: string, userId: string | null) => Promise<void>
+  onMoveCategory: (categoryId: string, direction: 'up' | 'down') => Promise<void>
+  onDeleteCategory: (categoryId: string) => Promise<void>
   onThemeChange: (theme: ThemeColors) => void
   onThemeReset: () => void
 }
@@ -37,6 +40,158 @@ const IconPin = () => (
   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14"/><path d="M12 2v10"/></svg>
 )
 
+interface CategoryRowProps {
+  category: Category
+  users: User[]
+  canAdmin: boolean
+  isFirst: boolean
+  isLast: boolean
+  onUpdate: (categoryId: string, data: { name?: string; description?: string }) => Promise<void>
+  onSetModerator: (categoryId: string, userId: string | null) => Promise<void>
+  onMove: (categoryId: string, direction: 'up' | 'down') => Promise<void>
+  onDelete: (categoryId: string) => Promise<void>
+}
+
+function CategoryRow({
+  category,
+  users,
+  canAdmin,
+  isFirst,
+  isLast,
+  onUpdate,
+  onSetModerator,
+  onMove,
+  onDelete,
+}: CategoryRowProps) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(category.name)
+  const [description, setDescription] = useState(category.description || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const startEdit = () => {
+    setName(category.name)
+    setDescription(category.description || '')
+    setError('')
+    setEditing(true)
+  }
+
+  const save = async () => {
+    try {
+      setBusy(true)
+      await onUpdate(category.id, { name: name.trim(), description: description.trim() })
+      setEditing(false)
+      setError('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    if (!window.confirm(`确定删除板块「${category.name}」吗？`)) return
+    try {
+      await onDelete(category.id)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '删除板块失败')
+    }
+  }
+
+  const changeModerator = async (userId: string) => {
+    try {
+      await onSetModerator(category.id, userId || null)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '设置板块管理员失败')
+    }
+  }
+
+  const move = async (direction: 'up' | 'down') => {
+    try {
+      await onMove(category.id, direction)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '调整顺序失败')
+    }
+  }
+
+  return (
+    <article className="admin-card category-card">
+      {editing ? (
+        <div className="admin-category-editor">
+          <input
+            type="text"
+            className="field-input"
+            value={name}
+            maxLength={20}
+            placeholder="板块名称"
+            aria-label="板块名称"
+            onChange={e => setName(e.target.value)}
+          />
+          <input
+            type="text"
+            className="field-input"
+            value={description}
+            maxLength={120}
+            placeholder="板块简介（可选）"
+            aria-label="板块简介"
+            onChange={e => setDescription(e.target.value)}
+          />
+          {error && <p className="login-error">{error}</p>}
+        </div>
+      ) : (
+        <div className="admin-category-main">
+          <span className="item-tag">{category.name}</span>
+          <span className="admin-category-count">{category.count} 帖</span>
+          {category.description && <span className="admin-category-desc">{category.description}</span>}
+          <span className="admin-category-mod">管理员：{category.moderatorName || '未设置'}</span>
+        </div>
+      )}
+
+      <div className="admin-card-actions">
+        {canAdmin && (
+          <select
+            className="field-input admin-mod-select"
+            value={category.moderatorId || ''}
+            aria-label={`设置「${category.name}」板块管理员`}
+            onChange={e => changeModerator(e.target.value)}
+          >
+            <option value="">未设置管理员</option>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        )}
+        {editing ? (
+          <>
+            <button className="admin-action-btn primary" onClick={save} disabled={busy}>
+              <IconCheck /> {busy ? '保存中…' : '保存'}
+            </button>
+            <button
+              className="admin-action-btn"
+              onClick={() => { setEditing(false); setError('') }}
+            >
+              取消
+            </button>
+          </>
+        ) : (
+          <button className="admin-action-btn" onClick={startEdit}>编辑</button>
+        )}
+        {canAdmin && (
+          <button className="admin-action-btn" onClick={() => move('up')} disabled={isFirst}>上移</button>
+        )}
+        {canAdmin && (
+          <button className="admin-action-btn" onClick={() => move('down')} disabled={isLast}>下移</button>
+        )}
+        {canAdmin && (
+          <button className="admin-action-btn danger" onClick={remove}>
+            <IconTrash /> 删除
+          </button>
+        )}
+      </div>
+    </article>
+  )
+}
+
 export default function Admin({
   user,
   users,
@@ -47,6 +202,9 @@ export default function Admin({
   onTogglePin,
   onBanUser,
   onAddCategory,
+  onUpdateCategory,
+  onSetCategoryModerator,
+  onMoveCategory,
   onDeleteCategory,
   onThemeChange,
   onThemeReset,
@@ -54,14 +212,26 @@ export default function Admin({
   const [tab, setTab] = useState<AdminTab>('posts')
   const [search, setSearch] = useState('')
   const [newCategory, setNewCategory] = useState('')
+  const [newCategoryDesc, setNewCategoryDesc] = useState('')
+  const [categoryError, setCategoryError] = useState('')
+  const [adding, setAdding] = useState(false)
 
   const isAdmin = user?.role === 'admin'
+  const myCategories = useMemo(
+    () => categories.filter(c => c.moderatorId === user?.id),
+    [categories, user?.id],
+  )
+  const canManage = isAdmin || myCategories.length > 0
+  const visibleCategories = isAdmin ? categories : myCategories
 
   const filteredPosts = useMemo(() => {
-    return posts.filter(p =>
+    const permitted = isAdmin
+      ? posts
+      : posts.filter(p => myCategories.some(c => c.name === p.category))
+    return permitted.filter(p =>
       p.title.includes(search) || p.author.includes(search) || p.category.includes(search)
     )
-  }, [posts, search])
+  }, [posts, search, isAdmin, myCategories])
 
   const filteredUsers = useMemo(() => {
     return users.filter(u =>
@@ -69,19 +239,28 @@ export default function Admin({
     )
   }, [users, search])
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     const name = newCategory.trim()
     if (!name) return
-    onAddCategory(name)
-    setNewCategory('')
+    try {
+      setAdding(true)
+      await onAddCategory(name, newCategoryDesc.trim())
+      setNewCategory('')
+      setNewCategoryDesc('')
+      setCategoryError('')
+    } catch (e) {
+      setCategoryError(e instanceof Error ? e.message : '新增板块失败')
+    } finally {
+      setAdding(false)
+    }
   }
 
-  if (!isAdmin) {
+  if (!canManage) {
     return (
       <div className="admin-center">
         <div className="admin-forbidden">
           <IconShield />
-          <h2>管理员权限 required</h2>
+          <h2>需要管理员权限</h2>
           <p>请先以管理员身份登录后访问此页面。</p>
         </div>
       </div>
@@ -94,9 +273,11 @@ export default function Admin({
         <div className="admin-header-bar">
           <h1 className="admin-page-title">
             <IconShield />
-            管理后台
+            {isAdmin ? '管理后台' : '板块管理'}
           </h1>
-          <span className="admin-subtitle">帖子 / 用户 / 板块</span>
+          <span className="admin-subtitle">
+            {isAdmin ? '帖子 / 用户 / 板块' : `管理板块：${myCategories.map(c => c.name).join('、')}`}
+          </span>
         </div>
 
         <div className="admin-tabs">
@@ -106,37 +287,43 @@ export default function Admin({
           >
             <IconMessage /> 帖子管理
           </button>
-          <button
-            className={`admin-tab ${tab === 'users' ? 'active' : ''}`}
-            onClick={() => setTab('users')}
-          >
-            <IconUserSmall /> 用户管理
-          </button>
+          {isAdmin && (
+            <button
+              className={`admin-tab ${tab === 'users' ? 'active' : ''}`}
+              onClick={() => setTab('users')}
+            >
+              <IconUserSmall /> 用户管理
+            </button>
+          )}
           <button
             className={`admin-tab ${tab === 'categories' ? 'active' : ''}`}
             onClick={() => setTab('categories')}
           >
             <IconCode /> 板块管理
           </button>
-          <button
-            className={`admin-tab ${tab === 'theme' ? 'active' : ''}`}
-            onClick={() => setTab('theme')}
-          >
-            <IconPalette /> 主题配色
-          </button>
+          {isAdmin && (
+            <button
+              className={`admin-tab ${tab === 'theme' ? 'active' : ''}`}
+              onClick={() => setTab('theme')}
+            >
+              <IconPalette /> 主题配色
+            </button>
+          )}
         </div>
 
-        <div className="search-wrap">
-          <input
-            type="text"
-            className="search-input"
-            placeholder={tab === 'posts' ? '检索帖子标题 / 作者 / 板块' : '检索用户名 / 简介'}
-            aria-label="搜索"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <span className="search-icon"><IconFilter /></span>
-        </div>
+        {tab !== 'theme' && (
+          <div className="search-wrap">
+            <input
+              type="text"
+              className="search-input"
+              placeholder={tab === 'posts' ? '检索帖子标题 / 作者 / 板块' : '检索用户名 / 简介'}
+              aria-label="搜索"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <span className="search-icon"><IconFilter /></span>
+          </div>
+        )}
 
         {tab === 'posts' && (
           <div className="admin-list">
@@ -171,7 +358,7 @@ export default function Admin({
           </div>
         )}
 
-        {tab === 'users' && (
+        {tab === 'users' && isAdmin && (
           <div className="admin-list">
             {filteredUsers.map(u => (
               <article key={u.id} className="admin-card user-card">
@@ -197,39 +384,68 @@ export default function Admin({
                 )}
               </article>
             ))}
+            {filteredUsers.length === 0 && (
+              <div className="post-empty">未找到匹配的用户</div>
+            )}
           </div>
         )}
 
         {tab === 'categories' && (
           <div className="admin-list">
-            <div className="admin-add-bar">
-              <input
-                type="text"
-                className="field-input admin-add-input"
-                placeholder="输入新板块名称"
-                value={newCategory}
-                onChange={e => setNewCategory(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
-              />
-              <button className="admin-action-btn primary" onClick={handleAddCategory}>
-                <IconPlus /> 新增板块
-              </button>
-            </div>
-            {categories.map(c => (
-              <article key={c.id} className="admin-card category-card">
-                <div className="admin-category-main">
-                  <span className="item-tag">{c.name}</span>
-                  <span className="admin-category-count">{c.count} 帖</span>
+            {isAdmin && (
+              <>
+                <div className="admin-add-bar">
+                  <input
+                    type="text"
+                    className="field-input admin-add-input"
+                    placeholder="输入新板块名称"
+                    maxLength={20}
+                    value={newCategory}
+                    onChange={e => setNewCategory(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                  />
+                  <input
+                    type="text"
+                    className="field-input admin-add-input"
+                    placeholder="板块简介（可选）"
+                    maxLength={120}
+                    value={newCategoryDesc}
+                    onChange={e => setNewCategoryDesc(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                  />
+                  <button className="admin-action-btn primary" onClick={handleAddCategory} disabled={adding}>
+                    <IconPlus /> {adding ? '新增中…' : '新增板块'}
+                  </button>
                 </div>
-                <button className="admin-action-btn danger" onClick={() => onDeleteCategory(c.id)}>
-                  <IconTrash /> 删除
-                </button>
-              </article>
+                {categoryError && <p className="login-error">{categoryError}</p>}
+                <p className="admin-subtitle">可自由新增、改名、排序、删除板块，并为每个板块指定管理员。</p>
+              </>
+            )}
+            {!isAdmin && (
+              <p className="admin-subtitle">你是这些板块的管理员，可修改板块名称与简介、置顶或删除本板块帖子。</p>
+            )}
+
+            {visibleCategories.map((c, i) => (
+              <CategoryRow
+                key={c.id}
+                category={c}
+                users={users}
+                canAdmin={isAdmin}
+                isFirst={i === 0}
+                isLast={i === visibleCategories.length - 1}
+                onUpdate={onUpdateCategory}
+                onSetModerator={onSetCategoryModerator}
+                onMove={onMoveCategory}
+                onDelete={onDeleteCategory}
+              />
             ))}
+            {visibleCategories.length === 0 && (
+              <div className="post-empty">暂无板块，先新增一个吧</div>
+            )}
           </div>
         )}
 
-        {tab === 'theme' && (
+        {tab === 'theme' && isAdmin && (
           <div className="admin-list">
             <div className="admin-card">
               <h2 className="admin-card-title"><IconPalette /> 论坛主题配色</h2>
@@ -253,16 +469,16 @@ export default function Admin({
               <span className="admin-stat-value">{users.length}</span>
             </div>
             <div className="admin-stat-item">
-              <span className="admin-stat-label">帖子总数</span>
-              <span className="admin-stat-value">{posts.length}</span>
+              <span className="admin-stat-label">{isAdmin ? '帖子总数' : '本板块帖子'}</span>
+              <span className="admin-stat-value">{filteredPosts.length}</span>
             </div>
             <div className="admin-stat-item">
-              <span className="admin-stat-label">板块数量</span>
-              <span className="admin-stat-value">{categories.length}</span>
+              <span className="admin-stat-label">{isAdmin ? '板块数量' : '管理板块数'}</span>
+              <span className="admin-stat-value">{visibleCategories.length}</span>
             </div>
             <div className="admin-stat-item">
               <span className="admin-stat-label">置顶新闻</span>
-              <span className="admin-stat-value">{posts.filter(p => p.pinned).length}</span>
+              <span className="admin-stat-value">{filteredPosts.filter(p => p.pinned).length}</span>
             </div>
           </div>
         </section>

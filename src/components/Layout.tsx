@@ -24,6 +24,7 @@ interface LayoutProps {
   onMessages: () => void
   onOpenTheme: () => void
   isAdmin?: boolean
+  isModerator?: boolean
   theme?: ThemeColors
   onRegisterUser: (u: User) => void
 }
@@ -40,6 +41,7 @@ export default function Layout({
   onMessages,
   onOpenTheme,
   isAdmin,
+  isModerator,
   theme,
   onRegisterUser,
 }: LayoutProps) {
@@ -260,7 +262,7 @@ export default function Layout({
           >
             <IconWarehouse />
           </button>
-          {isAdmin && (
+          {(isAdmin || isModerator) && (
             <button
               className={`nav-btn ${page === 'admin' ? 'active' : ''}`}
               aria-label="管理后台"

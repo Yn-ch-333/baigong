@@ -38,6 +38,12 @@ export interface Category {
   id: string
   name: string
   count: number
+  /** 板块简介 */
+  description?: string
+  /** 板块管理员用户 id */
+  moderatorId?: string
+  /** 板块管理员昵称（后端联表返回，便于展示） */
+  moderatorName?: string
 }
 
 export interface Comment {
