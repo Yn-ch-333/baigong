@@ -44,6 +44,8 @@ export interface BootstrapData {
   warehouse: WarehouseItem[]
   messages: Message[]
   collections: Collection[]
+  /** 短信通道是否已配置，未配置时前端隐藏验证码与找回密码入口 */
+  smsEnabled: boolean
 }
 
 export function login(username: string, password: string) {
@@ -53,11 +55,42 @@ export function login(username: string, password: string) {
   })
 }
 
-export function register(username: string, password: string, name: string, country: string) {
+export function register(username: string, password: string, name: string, country: string, phone: string, code: string) {
   return request<{ token: string; user: User }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, password, name, country }),
+    body: JSON.stringify({ username, password, name, country, phone, code }),
   })
+}
+
+export type SmsPurpose = 'register' | 'reset' | 'bind' | 'rebind'
+
+/** 发送短信验证码（注册 / 找回密码公开；绑定与换绑需登录） */
+export function sendSmsCode(phone: string, purpose: SmsPurpose) {
+  return request<{ ok: true; phone: string; expiresIn: number }>('/auth/sms/send', {
+    method: 'POST',
+    body: JSON.stringify({ phone, purpose }),
+  })
+}
+
+/** 忘记密码：手机号 + 短信验证码重置 */
+export function resetPassword(phone: string, code: string, password: string) {
+  return request<{ token: string; user: User }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ phone, code, password }),
+  })
+}
+
+/** 绑定 / 更换手机号（需短信验证码） */
+export function bindPhone(phone: string, code: string) {
+  return request<{ user: User }>('/auth/phone', {
+    method: 'POST',
+    body: JSON.stringify({ phone, code }),
+  })
+}
+
+/** 管理员 / 频道主查看全部用户完整信息（含手机号） */
+export function fetchAdminUsers() {
+  return request<{ users: User[] }>('/admin/users')
 }
 
 export function logout() {

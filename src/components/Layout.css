@@ -319,7 +319,17 @@ select.field-input option {
   margin: -6px 0 12px;
 }
 
+.login-hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--fg-3);
+}
+
 .login-toggle {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
   text-align: center;
   margin-top: 12px;
 }

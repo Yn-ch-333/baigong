@@ -28,6 +28,18 @@ interface KVNamespace {
 interface Env {
   DB: D1Database
   FILES: KVNamespace
+  // 短信通道（在 Cloudflare Pages 项目的环境变量中配置，勿写入代码）
+  SMS_PROVIDER?: string
+  SMS_SIGN_NAME?: string
+  SMS_WEBHOOK_URL?: string
+  SMS_WEBHOOK_TOKEN?: string
+  SMS_TWILIO_ACCOUNT_SID?: string
+  SMS_TWILIO_AUTH_TOKEN?: string
+  SMS_TWILIO_FROM?: string
+  SMS_ALIYUN_ACCESS_KEY_ID?: string
+  SMS_ALIYUN_ACCESS_KEY_SECRET?: string
+  SMS_ALIYUN_SIGN_NAME?: string
+  SMS_ALIYUN_TEMPLATE_CODE?: string
 }
 interface EventContext {
   request: Request
@@ -118,9 +130,11 @@ async function ensureSchema(env: Env): Promise<void> {
   const statements = [
     'CREATE TABLE IF NOT EXISTS tracks (id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT DEFAULT \'\', uploader_id TEXT, uploader_name TEXT DEFAULT \'\', mime TEXT DEFAULT \'audio/mpeg\', size INTEGER DEFAULT 0, created_at TEXT)',
     "ALTER TABLE users ADD COLUMN country TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''",
     "ALTER TABLE categories ADD COLUMN description TEXT DEFAULT ''",
     'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
     'ALTER TABLE categories ADD COLUMN moderator_id TEXT',
+    'CREATE TABLE IF NOT EXISTS sms_codes (id TEXT PRIMARY KEY, phone TEXT NOT NULL, code TEXT NOT NULL, purpose TEXT NOT NULL, user_id TEXT, attempts INTEGER DEFAULT 0, used INTEGER DEFAULT 0, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)',
   ]
   for (const sql of statements) {
     try {
@@ -142,13 +156,14 @@ interface UserRow {
   banned: number | null
   join_date: string | null
   country: string | null
+  phone: string | null
 }
 
 async function getUser(req: Request, env: Env): Promise<UserRow | null> {
   const token = getToken(req)
   if (!token) return null
   const row = await env.DB.prepare(
-    'SELECT u.id, u.username, u.password, u.name, u.avatar, u.bio, u.role, u.banned, u.join_date, u.country ' +
+    'SELECT u.id, u.username, u.password, u.name, u.avatar, u.bio, u.role, u.banned, u.join_date, u.country, u.phone ' +
       'FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?'
   )
     .bind(token)
@@ -174,6 +189,7 @@ async function createSession(env: Env, userId: string): Promise<string> {
 }
 
 // ---------- 行记录 → 前端模型 ----------
+// 公共视图：绝不包含手机号（手机号仅在 me 与管理员接口返回）
 function toUser(r: UserRow) {
   return {
     id: r.id,
@@ -186,6 +202,241 @@ function toUser(r: UserRow) {
     joinDate: r.join_date || '',
     country: r.country || '',
   }
+}
+
+// 本人视图：附带手机号，前端用 phone 是否为空判断是否必须补绑
+function toSelf(r: UserRow) {
+  return { ...toUser(r), phone: r.phone || '' }
+}
+
+// 管理员视图：完整个人信息，用于违规溯源
+function toUserDetail(r: UserRow) {
+  return { ...toUser(r), phone: r.phone || '', username: r.username }
+}
+
+/** 手机号规范化与校验：允许 + 前缀与国际号，中国大陆 11 位须以 1 开头 */
+function normalizePhone(input: string): string | null {
+  const phone = input.replace(/[\s-]/g, '')
+  if (!/^\+?\d{6,20}$/.test(phone)) return null
+  const digits = phone.replace(/^\+/, '')
+  if (digits.length === 11 && !/^1[3-9]\d{9}$/.test(digits)) return null
+  return phone
+}
+
+// ---------- 短信验证码 ----------
+const SMS_PURPOSES = ['register', 'reset', 'bind', 'rebind'] as const
+type SmsPurpose = (typeof SMS_PURPOSES)[number]
+const SMS_TTL_MS = 10 * 60 * 1000
+const SMS_COOLDOWN_MS = 60 * 1000
+const SMS_MAX_ATTEMPTS = 5
+
+function maskPhone(phone: string): string {
+  if (phone.length <= 7) return phone
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`
+}
+
+function purposeLabel(purpose: SmsPurpose): string {
+  if (purpose === 'register') return '注册'
+  if (purpose === 'reset') return '重置密码'
+  if (purpose === 'rebind') return '更换绑定'
+  return '绑定手机号'
+}
+
+/** 阿里云 RPC 签名要求的百分号编码 */
+function aliyunEncode(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/\+/g, '%20')
+    .replace(/\*/g, '%2A')
+    .replace(/!/g, '%21')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+}
+
+async function hmacSha1Base64(key: string, message: string): Promise<string> {
+  const enc = new TextEncoder()
+  const cryptoKey = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message))
+  let bin = ''
+  for (const b of new Uint8Array(sig)) bin += String.fromCharCode(b)
+  return btoa(bin)
+}
+
+/** 经由 Webhook 中转发送（由使用者自建转发到任意短信平台） */
+async function sendViaWebhook(env: Env, phone: string, code: string, text: string, purpose: SmsPurpose): Promise<string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (env.SMS_WEBHOOK_TOKEN) headers.Authorization = `Bearer ${env.SMS_WEBHOOK_TOKEN}`
+  const res = await fetch(env.SMS_WEBHOOK_URL as string, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ phone, code, purpose, message: text, signName: env.SMS_SIGN_NAME || '百工论坛' }),
+  })
+  return res.ok ? '' : `HTTP ${res.status}`
+}
+
+/** 阿里云短信 SendSms（RPC 签名） */
+async function sendViaAliyun(env: Env, phone: string, code: string): Promise<string> {
+  const params: Record<string, string> = {
+    AccessKeyId: env.SMS_ALIYUN_ACCESS_KEY_ID as string,
+    Action: 'SendSms',
+    Format: 'JSON',
+    PhoneNumbers: phone.replace(/^\+/, ''),
+    RegionId: 'cn-hangzhou',
+    SignName: env.SMS_ALIYUN_SIGN_NAME || env.SMS_SIGN_NAME || '百工论坛',
+    SignatureMethod: 'HMAC-SHA1',
+    SignatureNonce: crypto.randomUUID(),
+    SignatureVersion: '1.0',
+    TemplateCode: env.SMS_ALIYUN_TEMPLATE_CODE as string,
+    TemplateParam: JSON.stringify({ code }),
+    Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    Version: '2017-05-25',
+  }
+  const canonical = Object.keys(params)
+    .sort()
+    .map(k => `${aliyunEncode(k)}=${aliyunEncode(params[k])}`)
+    .join('&')
+  const stringToSign = `GET&${aliyunEncode('/')}&${aliyunEncode(canonical)}`
+  const signature = await hmacSha1Base64(`${env.SMS_ALIYUN_ACCESS_KEY_SECRET}&`, stringToSign)
+  const res = await fetch(`https://dysmsapi.aliyuncs.com/?Signature=${aliyunEncode(signature)}&${canonical}`)
+  let data: any = {}
+  try {
+    data = await res.json()
+  } catch {
+    data = {}
+  }
+  if (!res.ok || (data.Code && data.Code !== 'OK')) return String(data.Message || data.Code || `HTTP ${res.status}`)
+  return ''
+}
+
+/** Twilio Programmable Messaging */
+async function sendViaTwilio(env: Env, phone: string, text: string): Promise<string> {
+  const sid = env.SMS_TWILIO_ACCOUNT_SID as string
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${sid}:${env.SMS_TWILIO_AUTH_TOKEN as string}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ To: phone, From: env.SMS_TWILIO_FROM || '', Body: text }),
+  })
+  if (res.ok) return ''
+  let msg = `HTTP ${res.status}`
+  try {
+    const data = await res.json() as any
+    if (data && data.message) msg = String(data.message)
+  } catch {
+    // 响应非 JSON 时保留状态码
+  }
+  return msg
+}
+
+/** 已配置的短信通道名，空字符串表示未配置 */
+function smsProvider(env: Env): string {
+  const provider = (env.SMS_PROVIDER || '').toLowerCase()
+  if (provider) return provider
+  if (env.SMS_WEBHOOK_URL) return 'webhook'
+  if (env.SMS_TWILIO_ACCOUNT_SID) return 'twilio'
+  if (env.SMS_ALIYUN_ACCESS_KEY_ID) return 'aliyun'
+  return ''
+}
+
+/** 短信通道是否可用；未配置时注册保持开放，密码找回暂停 */
+function smsConfigured(env: Env): boolean {
+  const provider = smsProvider(env)
+  if (provider === 'webhook') return !!env.SMS_WEBHOOK_URL
+  if (provider === 'twilio') return !!(env.SMS_TWILIO_ACCOUNT_SID && env.SMS_TWILIO_AUTH_TOKEN && env.SMS_TWILIO_FROM)
+  if (provider === 'aliyun') return !!(env.SMS_ALIYUN_ACCESS_KEY_ID && env.SMS_ALIYUN_ACCESS_KEY_SECRET && env.SMS_ALIYUN_TEMPLATE_CODE)
+  return false
+}
+
+/** 按已配置的通道发送验证码，返回空字符串表示成功 */
+async function deliverSms(env: Env, phone: string, code: string, purpose: SmsPurpose): Promise<string> {
+  const sign = env.SMS_SIGN_NAME || '百工论坛'
+  const text = `【${sign}】您的${purposeLabel(purpose)}验证码是 ${code}，10 分钟内有效。如非本人操作请忽略。`
+  const provider = smsProvider(env)
+  if (!smsConfigured(env)) return 'not-configured'
+  if (provider === 'webhook') return sendViaWebhook(env, phone, code, text, purpose)
+  if (provider === 'twilio') return sendViaTwilio(env, phone, text)
+  return sendViaAliyun(env, phone, code)
+}
+
+/** 校验并消费验证码，返回空字符串表示通过 */
+async function consumeSmsCode(env: Env, phone: string, purpose: SmsPurpose, input: string): Promise<string> {
+  const code = String(input || '').trim()
+  if (!/^\d{6}$/.test(code)) return '请输入 6 位数字验证码'
+  const row = await env.DB.prepare(
+    'SELECT * FROM sms_codes WHERE phone = ? AND purpose = ? AND used = 0 ORDER BY created_at DESC LIMIT 1'
+  )
+    .bind(phone, purpose)
+    .first<any>()
+  if (!row) return '请先获取短信验证码'
+  if (Number(row.expires_at) < Date.now()) return '验证码已过期，请重新获取'
+  if (Number(row.attempts) >= SMS_MAX_ATTEMPTS) return '验证码错误次数过多，请重新获取'
+  if (String(row.code) !== code) {
+    await env.DB.prepare('UPDATE sms_codes SET attempts = attempts + 1 WHERE id = ?').bind(row.id).run()
+    return '验证码错误'
+  }
+  await env.DB.prepare('UPDATE sms_codes SET used = 1 WHERE id = ?').bind(row.id).run()
+  return ''
+}
+
+/** 发送验证码：注册 / 重置密码公开可用；绑定与换绑需登录 */
+async function sendSmsCode(req: Request, env: Env): Promise<Response> {
+  const body = await parseBody(req)
+  const purpose = String(body.purpose || 'register') as SmsPurpose
+  if (!SMS_PURPOSES.includes(purpose)) return err('未知的验证码用途', 400)
+
+  let target: string | null = null
+  let userId: string | null = null
+
+  if (purpose === 'bind' || purpose === 'rebind') {
+    const u = await requireUser(req, env)
+    if (u instanceof Response) return u
+    userId = u.id
+    if (purpose === 'bind') {
+      if (u.phone) return err('当前账号已绑定手机号，请使用更换手机号', 400)
+      target = normalizePhone(String(body.phone || ''))
+      if (!target) return err('请填写有效的手机号', 400)
+      const taken = await env.DB.prepare('SELECT id FROM users WHERE phone = ? AND id <> ?').bind(target, u.id).first()
+      if (taken) return err('该手机号已被其他账号绑定', 409)
+    } else {
+      target = normalizePhone(u.phone || '')
+      if (!target) return err('当前账号尚未绑定手机号', 400)
+    }
+  } else {
+    target = normalizePhone(String(body.phone || ''))
+    if (!target) return err('请填写有效的手机号', 400)
+    const bound = await env.DB.prepare('SELECT id FROM users WHERE phone = ?').bind(target).first()
+    if (purpose === 'register' && bound) return err('该手机号已被其他账号绑定', 409)
+    if (purpose === 'reset' && !bound) return err('该手机号尚未注册', 404)
+  }
+
+  const last = await env.DB.prepare(
+    'SELECT created_at FROM sms_codes WHERE phone = ? AND purpose = ? ORDER BY created_at DESC LIMIT 1'
+  )
+    .bind(target, purpose)
+    .first<{ created_at: number }>()
+  const elapsed = Date.now() - Number(last?.created_at || 0)
+  if (elapsed < SMS_COOLDOWN_MS) {
+    return err(`发送过于频繁，请 ${Math.ceil((SMS_COOLDOWN_MS - elapsed) / 1000)} 秒后再试`, 429)
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000))
+  const now = Date.now()
+  await env.DB.prepare(
+    'INSERT INTO sms_codes (id, phone, code, purpose, user_id, attempts, used, expires_at, created_at) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)'
+  )
+    .bind(crypto.randomUUID(), target, code, purpose, userId, now + SMS_TTL_MS, now)
+    .run()
+
+  const failure = await deliverSms(env, target, code, purpose)
+  if (failure) {
+    // 发送失败则作废本次验证码，不占用 60 秒冷却
+    await env.DB.prepare('DELETE FROM sms_codes WHERE phone = ? AND purpose = ? AND code = ?').bind(target, purpose, code).run()
+    if (failure === 'not-configured') return err('短信服务尚未配置，请联系论坛管理员', 503)
+    return err('验证码发送失败，请稍后重试', 502)
+  }
+  return json({ ok: true, phone: maskPhone(target), expiresIn: Math.floor(SMS_TTL_MS / 1000) })
 }
 
 function toAttachment(f: any) {
@@ -327,18 +578,24 @@ async function register(req: Request, env: Env): Promise<Response> {
   const country = String(body.country || '').trim().slice(0, 32)
   if (!username || !password || !name) return err('用户名、密码和昵称不能为空', 400)
   if (!country) return err('请选择所在国家或地区', 400)
+  const phone = normalizePhone(String(body.phone || ''))
+  if (!phone) return err('请填写有效的手机号（实名绑定，用于违规溯源）', 400)
   const exists = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first()
   if (exists) return err('用户名已存在', 409)
+  const phoneTaken = await env.DB.prepare('SELECT id FROM users WHERE phone = ?').bind(phone).first()
+  if (phoneTaken) return err('该手机号已被其他账号绑定', 409)
+  const codeErr = smsConfigured(env) ? await consumeSmsCode(env, phone, 'register', String(body.code || '')) : ''
+  if (codeErr) return err(codeErr, 400)
   const id = crypto.randomUUID()
   const pwd = await hashPassword(password)
   await env.DB.prepare(
-    'INSERT INTO users (id, username, password, name, avatar, bio, role, banned, join_date, country) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)'
+    'INSERT INTO users (id, username, password, name, avatar, bio, role, banned, join_date, country, phone) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)'
   )
-    .bind(id, username, pwd, name, name.slice(0, 1), '', 'user', today(), country)
+    .bind(id, username, pwd, name, name.slice(0, 1), '', 'user', today(), country, phone)
     .run()
   const token = await createSession(env, id)
   const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>()
-  return json({ token, user: toUser(row as UserRow) })
+  return json({ token, user: toSelf(row as UserRow) })
 }
 
 async function login(req: Request, env: Env): Promise<Response> {
@@ -349,7 +606,60 @@ async function login(req: Request, env: Env): Promise<Response> {
   const row = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(username).first<UserRow>()
   if (!row || !(await verifyPassword(password, row.password))) return err('用户名或密码错误', 401)
   const token = await createSession(env, row.id)
-  return json({ token, user: toUser(row) })
+  return json({ token, user: toSelf(row) })
+}
+
+// 绑定（无手机号）/ 更换绑定（已有手机号）：均需短信验证码
+// 未绑定：验证码发往新号码；已绑定：验证码发往原绑定号码
+async function bindPhone(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const body = await parseBody(req)
+  const existing = normalizePhone(u.phone || '')
+  const purpose: SmsPurpose = existing ? 'rebind' : 'bind'
+  const phone = normalizePhone(String(body.phone || ''))
+  if (!phone) return err('请填写有效的手机号', 400)
+  if (existing && phone === existing) return err('该号码已是当前绑定的手机号', 400)
+  const taken = await env.DB.prepare('SELECT id FROM users WHERE phone = ? AND id <> ?')
+    .bind(phone, u.id)
+    .first()
+  if (taken) return err('该手机号已被其他账号绑定', 409)
+  const codeErr = smsConfigured(env) ? await consumeSmsCode(env, existing || phone, purpose, String(body.code || '')) : ''
+  if (codeErr) return err(codeErr, 400)
+  await env.DB.prepare('UPDATE users SET phone = ? WHERE id = ?').bind(phone, u.id).run()
+  const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(u.id).first<UserRow>()
+  return json({ user: toSelf(row as UserRow) })
+}
+
+// 忘记密码：绑定手机号 + 短信验证码重置
+async function resetPassword(req: Request, env: Env): Promise<Response> {
+  const body = await parseBody(req)
+  const phone = normalizePhone(String(body.phone || ''))
+  const password = String(body.password || '')
+  if (!phone) return err('请填写有效的手机号', 400)
+  if (!password) return err('请输入新密码', 400)
+  const row = await env.DB.prepare('SELECT * FROM users WHERE phone = ?').bind(phone).first<UserRow>()
+  if (!row) return err('该手机号尚未注册', 404)
+  if (row.banned) return err('账号已被封禁', 403)
+  const codeErr = await consumeSmsCode(env, phone, 'reset', String(body.code || ''))
+  if (codeErr) return err(codeErr, 400)
+  const pwd = await hashPassword(password)
+  await env.DB.prepare('UPDATE users SET password = ? WHERE id = ?').bind(pwd, row.id).run()
+  // 密码重置后旧登录态全部失效
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.id).run()
+  const token = await createSession(env, row.id)
+  return json({ token, user: toSelf(row) })
+}
+
+// 仅频道主（板块管理员）可查看完整个人信息（含手机号），用于违规精准溯源
+// 说明：全局管理员也不可查看手机号，避免个人信息被扩大使用
+async function adminUsers(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const modRow = await env.DB.prepare('SELECT id FROM categories WHERE moderator_id = ? LIMIT 1').bind(u.id).first()
+  if (!modRow) return err('仅频道主可查看用户个人信息', 403)
+  const rows = await env.DB.prepare('SELECT * FROM users ORDER BY join_date ASC').all<UserRow>()
+  return json({ users: (rows.results || []).map(toUserDetail) })
 }
 
 async function logout(req: Request, env: Env): Promise<Response> {
@@ -399,7 +709,7 @@ async function bootstrap(req: Request, env: Env): Promise<Response> {
   }
 
   return json({
-    me: user ? toUser(user) : null,
+    me: user ? toSelf(user) : null,
     users: (users.results || []).map(toUser),
     categories: (cats.results || []).map(c => ({
       id: c.id,
@@ -414,6 +724,8 @@ async function bootstrap(req: Request, env: Env): Promise<Response> {
     warehouse: (warehouse.results || []).map(toWarehouseItem),
     messages,
     collections,
+    // 短信通道是否可用：前端据此决定是否显示验证码输入与找回密码入口
+    smsEnabled: smsConfigured(env),
   })
 }
 
@@ -811,7 +1123,7 @@ async function updateMe(req: Request, env: Env): Promise<Response> {
     ])
   }
   const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(u.id).first<UserRow>()
-  return json({ user: toUser(row as UserRow) })
+  return json({ user: toSelf(row as UserRow) })
 }
 
 // ---------- 仓库物料 ----------
@@ -1004,7 +1316,11 @@ type Handler = (req: Request, env: Env, params: string[], url: URL) => Promise<R
 const routes: Array<[string, string, Handler]> = [
   ['POST', 'auth/register', register],
   ['POST', 'auth/login', login],
+  ['POST', 'auth/sms/send', (req, env) => sendSmsCode(req, env)],
+  ['POST', 'auth/reset-password', (req, env) => resetPassword(req, env)],
+  ['POST', 'auth/phone', (req, env) => bindPhone(req, env)],
   ['POST', 'auth/logout', (req, env) => logout(req, env)],
+  ['GET', 'admin/users', (req, env) => adminUsers(req, env)],
   ['GET', 'bootstrap', (req, env) => bootstrap(req, env)],
   ['POST', 'posts', (req, env) => createPost(req, env)],
   ['DELETE', 'posts/*', (req, env, p) => deletePost(req, env, p)],

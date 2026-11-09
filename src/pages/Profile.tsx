@@ -3,6 +3,7 @@ import type { User, Post, PageRoute, Collection } from '../types'
 import { avatarUrl, avatarInitial } from '../fileStore'
 import * as api from '../api'
 import { COUNTRY_OPTIONS } from '../components/WorldMap'
+import SmsCodeField from '../components/SmsCodeField'
 import {
   IconNewspaper, IconCode, IconMessage, IconMail, IconBookmark,
   IconClose, IconPaperclip, IconEye,
@@ -21,7 +22,15 @@ interface ProfileProps {
   onViewPost: (postId: string) => void
   onToggleCollection: (postId: string) => void
   onUpdateProfile: (data: { name?: string; bio?: string; avatar?: string; country?: string }) => Promise<void>
+  onPhoneBound: (user: User) => void
+  /** 短信通道是否已配置；未配置时隐藏更换手机号入口 */
+  smsEnabled?: boolean
   isAdmin?: boolean
+}
+
+function maskPhone(phone?: string): string {
+  if (!phone || phone.length <= 7) return phone || ''
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`
 }
 
 const IconUserLarge = () => (
@@ -60,7 +69,7 @@ function UserAvatar({ user, size }: { user?: User; size?: 'large' }) {
 
 export default function Profile({
   users, posts, currentUser, selectedUserId, collections,
-  onNavigate, onSendMessage, onViewPost, onToggleCollection, onUpdateProfile, isAdmin,
+  onNavigate, onSendMessage, onViewPost, onToggleCollection, onUpdateProfile, onPhoneBound, smsEnabled, isAdmin,
 }: ProfileProps) {
   const [editOpen, setEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
@@ -71,6 +80,11 @@ export default function Profile({
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [collectionsOpen, setCollectionsOpen] = useState(false)
+  const [phoneOpen, setPhoneOpen] = useState(false)
+  const [newPhone, setNewPhone] = useState('')
+  const [phoneCode, setPhoneCode] = useState('')
+  const [phoneError, setPhoneError] = useState('')
+  const [phoneBusy, setPhoneBusy] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const profileUser = useMemo(() => {
@@ -139,6 +153,35 @@ export default function Profile({
     }
   }
 
+  const openPhoneModal = () => {
+    setNewPhone('')
+    setPhoneCode('')
+    setPhoneError('')
+    setPhoneOpen(true)
+  }
+
+  const handleChangePhone = async () => {
+    if (!/^\+?[\d\s-]{6,20}$/.test(newPhone.trim())) {
+      setPhoneError('请填写有效的新手机号')
+      return
+    }
+    if (!/^\d{6}$/.test(phoneCode)) {
+      setPhoneError('请填写手机收到的 6 位短信验证码')
+      return
+    }
+    setPhoneBusy(true)
+    setPhoneError('')
+    try {
+      const { user: updated } = await api.bindPhone(newPhone.trim(), phoneCode)
+      onPhoneBound(updated)
+      setPhoneOpen(false)
+    } catch (err) {
+      setPhoneError(err instanceof Error ? err.message : '更换失败，请重试')
+    } finally {
+      setPhoneBusy(false)
+    }
+  }
+
   return (
     <div className="content-row">
       {/* Center column */}
@@ -174,6 +217,11 @@ export default function Profile({
             {isSelf && (
               <button className="profile-btn primary" onClick={openEdit}>
                 <IconEdit /> 编辑资料
+              </button>
+            )}
+            {isSelf && smsEnabled && currentUser?.phone && (
+              <button className="profile-btn" onClick={openPhoneModal}>
+                更换手机号
               </button>
             )}
             {isSelf && (
@@ -358,6 +406,48 @@ export default function Profile({
               onClick={handleSaveProfile}
               disabled={saving || uploading}
             >{saving ? '保存中…' : '保存'}</button>
+          </div>
+        </div>
+      )}
+
+      {phoneOpen && (
+        <div className="modal-overlay" onClick={() => !phoneBusy && setPhoneOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>更换绑定手机号</h3>
+              <button
+                className="modal-close"
+                onClick={() => !phoneBusy && setPhoneOpen(false)}
+                aria-label="关闭"
+              ><IconClose /></button>
+            </div>
+            <p className="login-hint">
+              验证码将发送至当前绑定的 {maskPhone(currentUser?.phone)}，验证通过后更换为新号码。
+            </p>
+            <label className="field-label">
+              新手机号
+              <input
+                type="tel"
+                className="field-input"
+                placeholder="输入要更换的新手机号"
+                value={newPhone}
+                onChange={e => { setNewPhone(e.target.value); setPhoneError('') }}
+              />
+            </label>
+            <SmsCodeField
+              phone=""
+              purpose="rebind"
+              value={phoneCode}
+              onChange={setPhoneCode}
+              onError={setPhoneError}
+            />
+            {phoneError && <p className="login-error">{phoneError}</p>}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleChangePhone}
+              disabled={phoneBusy}
+            >{phoneBusy ? '更换中…' : '确认更换'}</button>
           </div>
         </div>
       )}

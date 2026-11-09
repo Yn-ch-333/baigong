@@ -3,6 +3,7 @@ import type { User, Category, Post, PageRoute, ThemeColors, Attachment } from '.
 import { formatFileSize, avatarUrl } from '../fileStore'
 import * as api from '../api'
 import { COUNTRY_OPTIONS } from './WorldMap'
+import SmsCodeField from './SmsCodeField'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
   IconMail, IconUser, IconPlus, IconClose, IconPaperclip,
@@ -27,6 +28,8 @@ interface LayoutProps {
   isModerator?: boolean
   theme?: ThemeColors
   onRegisterUser: (u: User) => void
+  /** 短信通道是否已配置 */
+  smsEnabled?: boolean
 }
 
 export default function Layout({
@@ -44,9 +47,13 @@ export default function Layout({
   isModerator,
   theme,
   onRegisterUser,
+  smsEnabled,
 }: LayoutProps) {
   const [loginOpen, setLoginOpen] = useState(false)
-  const [isRegistering, setIsRegistering] = useState(false)
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login')
+  const [phoneInput, setPhoneInput] = useState('')
+  const [registerCode, setRegisterCode] = useState('')
+  const [resetCode, setResetCode] = useState('')
   const [loginError, setLoginError] = useState('')
   const [postOpen, setPostOpen] = useState(false)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
@@ -112,6 +119,7 @@ export default function Layout({
     const confirm = String(fd.get('confirmPassword') || '').trim()
     const name = String(fd.get('name') || '').trim()
     const country = String(fd.get('country') || '').trim()
+    const phone = phoneInput.trim()
 
     if (!username || !password || !name) {
       setLoginError('请填写用户名、密码和昵称')
@@ -121,13 +129,21 @@ export default function Layout({
       setLoginError('请选择所在国家或地区')
       return
     }
+    if (!/^\+?[\d\s-]{6,20}$/.test(phone)) {
+      setLoginError('请填写有效手机号（用于违规溯源）')
+      return
+    }
+    if (smsEnabled && !/^\d{6}$/.test(registerCode)) {
+      setLoginError('请填写手机收到的 6 位短信验证码')
+      return
+    }
     if (password !== confirm) {
       setLoginError('两次输入的密码不一致')
       return
     }
 
     try {
-      const { token, user: registered } = await api.register(username, password, name, country)
+      const { token, user: registered } = await api.register(username, password, name, country, phone, registerCode)
       api.setToken(token)
       onRegisterUser(registered)
       setUser(registered)
@@ -137,7 +153,50 @@ export default function Layout({
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : '注册失败')
     }
-  }, [onRegisterUser, setUser, requestNotifyPermission])
+  }, [onRegisterUser, setUser, requestNotifyPermission, phoneInput, registerCode, smsEnabled])
+
+  const handleResetPassword = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget as HTMLFormElement)
+    const password = String(fd.get('newPassword') || '').trim()
+    const confirm = String(fd.get('confirmPassword') || '').trim()
+    const phone = phoneInput.trim()
+
+    if (!/^\+?[\d\s-]{6,20}$/.test(phone)) {
+      setLoginError('请填写已绑定的手机号')
+      return
+    }
+    if (!/^\d{6}$/.test(resetCode)) {
+      setLoginError('请填写手机收到的 6 位短信验证码')
+      return
+    }
+    if (!password) {
+      setLoginError('请输入新密码')
+      return
+    }
+    if (password !== confirm) {
+      setLoginError('两次输入的密码不一致')
+      return
+    }
+
+    try {
+      const { token, user: restored } = await api.resetPassword(phone, resetCode, password)
+      api.setToken(token)
+      setUser(restored)
+      requestNotifyPermission()
+      setLoginError('')
+      setLoginOpen(false)
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : '密码重置失败')
+    }
+  }, [setUser, requestNotifyPermission, phoneInput, resetCode])
+
+  const switchAuthMode = useCallback((mode: 'login' | 'register' | 'reset') => {
+    setAuthMode(mode)
+    setLoginError('')
+    setRegisterCode('')
+    setResetCode('')
+  }, [])
 
   const handleLogout = useCallback(() => {
     api.logout().catch(() => { /* 忽略登出接口失败 */ })
@@ -298,56 +357,127 @@ export default function Layout({
         <div className="modal-overlay" onClick={() => setLoginOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>{isRegistering ? '注册账号' : '登录'}</h3>
+              <h3>{authMode === 'register' ? '注册账号' : authMode === 'reset' ? '找回密码' : '登录'}</h3>
               <button className="modal-close" onClick={() => setLoginOpen(false)} aria-label="关闭"><IconClose /></button>
             </div>
-            <form onSubmit={isRegistering ? handleRegister : handleLogin}>
-              <label className="field-label">
-                用户名
-                <input name="username" className="field-input" placeholder="输入用户名" required />
-              </label>
-              <label className="field-label">
-                密码
-                <input name="password" type="password" className="field-input" placeholder="输入密码" required />
-              </label>
-              {isRegistering && (
+            {authMode === 'reset' ? (
+              <form onSubmit={handleResetPassword}>
+                <p className="login-hint">用注册时绑定的手机号接收短信验证码，即可设置新密码。</p>
+                <label className="field-label">
+                  已绑定手机号
+                  <input
+                    name="phone"
+                    type="tel"
+                    className="field-input"
+                    placeholder="输入绑定的手机号"
+                    value={phoneInput}
+                    onChange={e => { setPhoneInput(e.target.value); setLoginError('') }}
+                    required
+                  />
+                </label>
+                <SmsCodeField
+                  phone={phoneInput}
+                  purpose="reset"
+                  value={resetCode}
+                  onChange={setResetCode}
+                  onError={setLoginError}
+                />
+                <label className="field-label">
+                  新密码
+                  <input name="newPassword" type="password" className="field-input" placeholder="输入新密码" required />
+                </label>
+                <label className="field-label">
+                  确认新密码
+                  <input name="confirmPassword" type="password" className="field-input" placeholder="再次输入新密码" required />
+                </label>
+                {loginError && <p className="login-error">{loginError}</p>}
+                <button type="submit" className="btn-primary">重置密码并登录</button>
+              </form>
+            ) : (
+              <form onSubmit={authMode === 'register' ? handleRegister : handleLogin}>
+                <label className="field-label">
+                  用户名
+                  <input name="username" className="field-input" placeholder="输入用户名" required />
+                </label>
+                <label className="field-label">
+                  密码
+                  <input name="password" type="password" className="field-input" placeholder="输入密码" required />
+                </label>
+                {authMode === 'register' && (
+                  <>
+                    <label className="field-label">
+                      确认密码
+                      <input name="confirmPassword" type="password" className="field-input" placeholder="再次输入密码" required />
+                    </label>
+                    <label className="field-label">
+                      昵称
+                      <input name="name" className="field-input" placeholder="显示昵称" required />
+                    </label>
+                    <label className="field-label">
+                      国家 / 地区
+                      <select name="country" className="field-input" defaultValue="" required>
+                        <option value="" disabled>选择你所在的国家或地区</option>
+                        {COUNTRY_OPTIONS.map(c => (
+                          <option key={c.id} value={c.id}>{c.flag} {c.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field-label">
+                      手机号（必填）
+                      <input
+                        name="phone"
+                        type="tel"
+                        className="field-input"
+                        placeholder="用于实名绑定，违规可溯源"
+                        value={phoneInput}
+                        onChange={e => { setPhoneInput(e.target.value); setLoginError('') }}
+                        required
+                      />
+                    </label>
+                    {smsEnabled && (
+                      <SmsCodeField
+                        phone={phoneInput}
+                        purpose="register"
+                        value={registerCode}
+                        onChange={setRegisterCode}
+                        onError={setLoginError}
+                      />
+                    )}
+                    <label className="field-label">
+                      个人简介
+                      <input name="bio" className="field-input" placeholder="一句话介绍" />
+                    </label>
+                  </>
+                )}
+                {loginError && <p className="login-error">{loginError}</p>}
+                <button type="submit" className="btn-primary">
+                  {authMode === 'register' ? '注册' : '登录'}
+                </button>
+              </form>
+            )}
+            <div className="login-toggle">
+              {authMode === 'login' && (
                 <>
-                  <label className="field-label">
-                    确认密码
-                    <input name="confirmPassword" type="password" className="field-input" placeholder="再次输入密码" required />
-                  </label>
-                  <label className="field-label">
-                    昵称
-                    <input name="name" className="field-input" placeholder="显示昵称" required />
-                  </label>
-                  <label className="field-label">
-                    国家 / 地区
-                    <select name="country" className="field-input" defaultValue="" required>
-                      <option value="" disabled>选择你所在的国家或地区</option>
-                      {COUNTRY_OPTIONS.map(c => (
-                        <option key={c.id} value={c.id}>{c.flag} {c.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field-label">
-                    个人简介
-                    <input name="bio" className="field-input" placeholder="一句话介绍" />
-                  </label>
+                  {smsEnabled && (
+                    <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('reset')}>
+                      忘记密码？
+                    </button>
+                  )}
+                  <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('register')}>
+                    没有账号？去注册
+                  </button>
                 </>
               )}
-              {loginError && <p className="login-error">{loginError}</p>}
-              <button type="submit" className="btn-primary">
-                {isRegistering ? '注册' : '登录'}
-              </button>
-            </form>
-            <div className="login-toggle">
-              <button
-                type="button"
-                className="login-toggle-btn"
-                onClick={() => { setIsRegistering(!isRegistering); setLoginError('') }}
-              >
-                {isRegistering ? '已有账号？去登录' : '没有账号？去注册'}
-              </button>
+              {authMode === 'register' && (
+                <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('login')}>
+                  已有账号？去登录
+                </button>
+              )}
+              {authMode === 'reset' && (
+                <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('login')}>
+                  返回登录
+                </button>
+              )}
             </div>
           </div>
         </div>

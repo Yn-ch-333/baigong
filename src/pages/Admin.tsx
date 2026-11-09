@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { User, Post, Category } from '../types'
+import { fetchAdminUsers } from '../api'
 import {
   IconFilter, IconMessage, IconEye, IconShield,
   IconCode, IconClose, IconPlus, IconCheck, IconPalette,
@@ -211,6 +212,8 @@ export default function Admin({
 }: AdminProps) {
   const [tab, setTab] = useState<AdminTab>('posts')
   const [search, setSearch] = useState('')
+  const [detailUsers, setDetailUsers] = useState<User[]>([])
+  const [detailError, setDetailError] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [newCategoryDesc, setNewCategoryDesc] = useState('')
   const [categoryError, setCategoryError] = useState('')
@@ -222,7 +225,19 @@ export default function Admin({
     [categories, user?.id],
   )
   const canManage = isAdmin || myCategories.length > 0
+  /** 用户个人信息（含手机号）仅频道主可见，全局管理员不可查看 */
+  const canViewUsers = myCategories.length > 0
   const visibleCategories = isAdmin ? categories : myCategories
+
+  // 频道主拉取完整个人信息（含手机号），用于违规精准溯源
+  useEffect(() => {
+    if (!canViewUsers) return
+    let alive = true
+    fetchAdminUsers()
+      .then(({ users: list }) => { if (alive) setDetailUsers(list) })
+      .catch(() => { if (alive) setDetailError('个人信息加载失败，请重新登录后再试') })
+    return () => { alive = false }
+  }, [canViewUsers])
 
   const filteredPosts = useMemo(() => {
     const permitted = isAdmin
@@ -234,10 +249,14 @@ export default function Admin({
   }, [posts, search, isAdmin, myCategories])
 
   const filteredUsers = useMemo(() => {
-    return users.filter(u =>
-      u.name.includes(search) || (u.bio?.includes(search) ?? false)
+    const list = detailUsers.length ? detailUsers : users
+    return list.filter(u =>
+      u.name.includes(search)
+      || (u.bio?.includes(search) ?? false)
+      || (u.username?.includes(search) ?? false)
+      || (u.phone?.includes(search) ?? false)
     )
-  }, [users, search])
+  }, [detailUsers, users, search])
 
   const handleAddCategory = async () => {
     const name = newCategory.trim()
@@ -287,12 +306,12 @@ export default function Admin({
           >
             <IconMessage /> 帖子管理
           </button>
-          {isAdmin && (
+          {canViewUsers && (
             <button
               className={`admin-tab ${tab === 'users' ? 'active' : ''}`}
               onClick={() => setTab('users')}
             >
-              <IconUserSmall /> 用户管理
+              <IconUserSmall /> 用户信息
             </button>
           )}
           <button
@@ -358,8 +377,12 @@ export default function Admin({
           </div>
         )}
 
-        {tab === 'users' && isAdmin && (
+        {tab === 'users' && canViewUsers && (
           <div className="admin-list">
+            <p className="admin-subtitle">
+              个人信息仅用于违规精准溯源，请勿外传。可按昵称、用户名或手机号检索。
+            </p>
+            {detailError && <p className="login-error">{detailError}</p>}
             {filteredUsers.map(u => (
               <article key={u.id} className="admin-card user-card">
                 <div className="admin-user-main">
@@ -371,10 +394,22 @@ export default function Admin({
                       {u.banned && <span className="role-badge banned">已封禁</span>}
                     </div>
                     <p className="admin-user-bio">{u.bio || '暂无个人简介'}</p>
+                    <div className="admin-user-fields">
+                      <span className="admin-user-field">
+                        <span className="admin-user-field-label">用户名</span>{u.username || '-'}
+                      </span>
+                      <span className="admin-user-field">
+                        <span className="admin-user-field-label">手机号</span>
+                        <span className="admin-user-phone">{u.phone || '未绑定'}</span>
+                      </span>
+                      <span className="admin-user-field">
+                        <span className="admin-user-field-label">国家/地区</span>{u.country || '-'}
+                      </span>
+                    </div>
                     <span className="admin-user-date">加入于 {u.joinDate}</span>
                   </div>
                 </div>
-                {u.role !== 'admin' && (
+                {isAdmin && u.role !== 'admin' && (
                   <button
                     className={`admin-action-btn ${u.banned ? 'primary' : 'danger'}`}
                     onClick={() => onBanUser(u.id, !u.banned)}

@@ -10,6 +10,7 @@ import Messages from './pages/Messages'
 import Warehouse from './pages/Warehouse'
 import ThemeModal from './components/ThemeModal'
 import MusicPlayer from './components/MusicPlayer'
+import PhoneBindModal from './components/PhoneBindModal'
 import * as api from './api'
 import type { User, Post, Category, Message, WarehouseItem, Comment, Collection, PageRoute, ThemeColors } from './types'
 import defaultBgImage from './assets/theme-bg.jpg'
@@ -43,6 +44,7 @@ function App() {
   const [messageTargetId, setMessageTargetId] = useState<string>('')
   const [theme, setTheme] = useState<ThemeColors>(DEFAULT_THEME)
   const [themeOpen, setThemeOpen] = useState(false)
+  const [smsEnabled, setSmsEnabled] = useState(false)
   const [msgToast, setMsgToast] = useState('')
   const messagesRef = useRef<Message[]>([])
   const toastTimerRef = useRef<number | null>(null)
@@ -134,6 +136,7 @@ function App() {
       setWarehouse(data.warehouse)
       setMessages(data.messages)
       setCollections(data.collections)
+      setSmsEnabled(!!data.smsEnabled)
       if (data.me) setUser(data.me)
     }).catch(err => {
       console.error('加载启动数据失败', err)
@@ -163,6 +166,11 @@ function App() {
 
   const navigate = useCallback((p: PageRoute) => {
     setPage(p)
+  }, [])
+
+  const handlePhoneBound = useCallback((updated: User) => {
+    setUser(updated)
+    setUsers(prev => prev.map(u => (u.id === updated.id ? { ...u, phone: updated.phone } : u)))
   }, [])
 
   const navigateToProfile = useCallback((userId: string) => {
@@ -368,6 +376,7 @@ function App() {
         isModerator={isModerator}
         theme={theme}
         onRegisterUser={handleRegisterUser}
+        smsEnabled={smsEnabled}
       >
         {page === 'home' && (
           <Home
@@ -418,6 +427,8 @@ function App() {
             onViewPost={navigateToPost}
             onToggleCollection={handleToggleCollection}
             onUpdateProfile={handleUpdateProfile}
+            onPhoneBound={handlePhoneBound}
+            smsEnabled={smsEnabled}
             isAdmin={user?.role === 'admin'}
           />
         )}
@@ -483,6 +494,12 @@ function App() {
         />
       )}
       <MusicPlayer user={user} />
+      <PhoneBindModal
+        open={!!user && !user.phone}
+        user={user}
+        onBound={handlePhoneBound}
+        smsEnabled={smsEnabled}
+      />
     </>
   )
 }

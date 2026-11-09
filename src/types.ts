@@ -10,6 +10,8 @@ export interface User {
   password?: string
   /** 所在国家/地区 id，与世界地图国家节点一致 */
   country?: string
+  /** 手机号：仅本人与管理员可见 */
+  phone?: string
 }
 
 export interface Attachment {

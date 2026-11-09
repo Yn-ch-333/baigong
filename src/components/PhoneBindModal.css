@@ -1,0 +1,14 @@
+.phone-bind-overlay {
+  z-index: 300;
+}
+
+.phone-bind-modal {
+  max-width: 420px;
+}
+
+.phone-bind-desc {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--fg-3);
+}
