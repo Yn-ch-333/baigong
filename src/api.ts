@@ -72,11 +72,11 @@ export function sendSmsCode(phone: string, purpose: SmsPurpose) {
   })
 }
 
-/** 忘记密码：手机号 + 短信验证码重置 */
-export function resetPassword(phone: string, code: string, password: string) {
+/** 忘记密码：短信通道可用时用验证码，否则用用户名 + 手机号校验 */
+export function resetPassword(phone: string, code: string, password: string, username?: string) {
   return request<{ token: string; user: User }>('/auth/reset-password', {
     method: 'POST',
-    body: JSON.stringify({ phone, code, password }),
+    body: JSON.stringify({ phone, code, password, username }),
   })
 }
 

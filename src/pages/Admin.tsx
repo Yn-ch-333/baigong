@@ -225,11 +225,11 @@ export default function Admin({
     [categories, user?.id],
   )
   const canManage = isAdmin || myCategories.length > 0
-  /** 用户个人信息（含手机号）仅频道主可见，全局管理员不可查看 */
-  const canViewUsers = myCategories.length > 0
+  /** 用户个人信息（含手机号）频道主与板块管理员均可查看 */
+  const canViewUsers = canManage
   const visibleCategories = isAdmin ? categories : myCategories
 
-  // 频道主拉取完整个人信息（含手机号），用于违规精准溯源
+  // 频道主 / 板块管理员拉取完整个人信息（含手机号），用于违规精准溯源
   useEffect(() => {
     if (!canViewUsers) return
     let alive = true

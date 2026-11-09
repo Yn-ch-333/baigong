@@ -50,7 +50,7 @@ export default function PhoneBindModal({ open, user, onBound, smsEnabled }: Phon
           <h3>绑定手机号</h3>
         </div>
         <p className="phone-bind-desc">
-          论坛要求所有账号实名绑定手机号。手机号仅用于违规行为精准溯源，不会公开展示，仅频道主可查看。
+          论坛要求所有账号实名绑定手机号。手机号仅用于违规行为精准溯源，不会公开展示，仅频道主与板块管理员可查看。
         </p>
         <form onSubmit={submit}>
           <label className="field-label">

@@ -160,13 +160,18 @@ export default function Layout({
     const fd = new FormData(e.currentTarget as HTMLFormElement)
     const password = String(fd.get('newPassword') || '').trim()
     const confirm = String(fd.get('confirmPassword') || '').trim()
+    const username = String(fd.get('username') || '').trim()
     const phone = phoneInput.trim()
 
     if (!/^\+?[\d\s-]{6,20}$/.test(phone)) {
       setLoginError('请填写已绑定的手机号')
       return
     }
-    if (!/^\d{6}$/.test(resetCode)) {
+    if (!smsEnabled && !username) {
+      setLoginError('请填写用户名')
+      return
+    }
+    if (smsEnabled && !/^\d{6}$/.test(resetCode)) {
       setLoginError('请填写手机收到的 6 位短信验证码')
       return
     }
@@ -180,7 +185,7 @@ export default function Layout({
     }
 
     try {
-      const { token, user: restored } = await api.resetPassword(phone, resetCode, password)
+      const { token, user: restored } = await api.resetPassword(phone, resetCode, password, username)
       api.setToken(token)
       setUser(restored)
       requestNotifyPermission()
@@ -189,7 +194,7 @@ export default function Layout({
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : '密码重置失败')
     }
-  }, [setUser, requestNotifyPermission, phoneInput, resetCode])
+  }, [setUser, requestNotifyPermission, phoneInput, resetCode, smsEnabled])
 
   const switchAuthMode = useCallback((mode: 'login' | 'register' | 'reset') => {
     setAuthMode(mode)
@@ -362,7 +367,17 @@ export default function Layout({
             </div>
             {authMode === 'reset' ? (
               <form onSubmit={handleResetPassword}>
-                <p className="login-hint">用注册时绑定的手机号接收短信验证码，即可设置新密码。</p>
+                <p className="login-hint">
+                  {smsEnabled
+                    ? '用注册时绑定的手机号接收短信验证码，即可设置新密码。'
+                    : '填写注册时的用户名与绑定手机号，即可设置新密码。'}
+                </p>
+                {!smsEnabled && (
+                  <label className="field-label">
+                    用户名
+                    <input name="username" className="field-input" placeholder="输入注册时的用户名" required />
+                  </label>
+                )}
                 <label className="field-label">
                   已绑定手机号
                   <input
@@ -375,13 +390,15 @@ export default function Layout({
                     required
                   />
                 </label>
-                <SmsCodeField
-                  phone={phoneInput}
-                  purpose="reset"
-                  value={resetCode}
-                  onChange={setResetCode}
-                  onError={setLoginError}
-                />
+                {smsEnabled && (
+                  <SmsCodeField
+                    phone={phoneInput}
+                    purpose="reset"
+                    value={resetCode}
+                    onChange={setResetCode}
+                    onError={setLoginError}
+                  />
+                )}
                 <label className="field-label">
                   新密码
                   <input name="newPassword" type="password" className="field-input" placeholder="输入新密码" required />
@@ -458,11 +475,9 @@ export default function Layout({
             <div className="login-toggle">
               {authMode === 'login' && (
                 <>
-                  {smsEnabled && (
-                    <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('reset')}>
-                      忘记密码？
-                    </button>
-                  )}
+                  <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('reset')}>
+                    忘记密码？
+                  </button>
                   <button type="button" className="login-toggle-btn" onClick={() => switchAuthMode('register')}>
                     没有账号？去注册
                   </button>

@@ -641,8 +641,15 @@ async function resetPassword(req: Request, env: Env): Promise<Response> {
   const row = await env.DB.prepare('SELECT * FROM users WHERE phone = ?').bind(phone).first<UserRow>()
   if (!row) return err('该手机号尚未注册', 404)
   if (row.banned) return err('账号已被封禁', 403)
-  const codeErr = await consumeSmsCode(env, phone, 'reset', String(body.code || ''))
-  if (codeErr) return err(codeErr, 400)
+  if (smsConfigured(env)) {
+    const codeErr = await consumeSmsCode(env, phone, 'reset', String(body.code || ''))
+    if (codeErr) return err(codeErr, 400)
+  } else {
+    // 短信通道未配置时，用「用户名 + 手机号」双重匹配校验身份
+    const username = String(body.username || '').trim()
+    if (!username) return err('请填写用户名', 400)
+    if (row.username !== username) return err('用户名与手机号不匹配', 400)
+  }
   const pwd = await hashPassword(password)
   await env.DB.prepare('UPDATE users SET password = ? WHERE id = ?').bind(pwd, row.id).run()
   // 密码重置后旧登录态全部失效
@@ -651,13 +658,14 @@ async function resetPassword(req: Request, env: Env): Promise<Response> {
   return json({ token, user: toSelf(row) })
 }
 
-// 仅频道主（板块管理员）可查看完整个人信息（含手机号），用于违规精准溯源
-// 说明：全局管理员也不可查看手机号，避免个人信息被扩大使用
+// 频道主（全局管理员）与板块管理员均可查看完整个人信息（含手机号），用于违规精准溯源
 async function adminUsers(req: Request, env: Env): Promise<Response> {
   const u = await requireUser(req, env)
   if (u instanceof Response) return u
-  const modRow = await env.DB.prepare('SELECT id FROM categories WHERE moderator_id = ? LIMIT 1').bind(u.id).first()
-  if (!modRow) return err('仅频道主可查看用户个人信息', 403)
+  if (u.role !== 'admin') {
+    const modRow = await env.DB.prepare('SELECT id FROM categories WHERE moderator_id = ? LIMIT 1').bind(u.id).first()
+    if (!modRow) return err('仅频道主与板块管理员可查看用户个人信息', 403)
+  }
   const rows = await env.DB.prepare('SELECT * FROM users ORDER BY join_date ASC').all<UserRow>()
   return json({ users: (rows.results || []).map(toUserDetail) })
 }
