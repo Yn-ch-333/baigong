@@ -214,8 +214,8 @@ export default function Layout({
     const picked = Array.from(e.target.files || [])
     e.target.value = ''
     if (picked.length === 0) return
-    if (pendingFiles.length + picked.length > 50) {
-      setFileError('单个帖子最多 50 个附件，请分批发布')
+    if (pendingFiles.length + picked.length > 100) {
+      setFileError('单个帖子最多 100 个附件，请分批发布')
       return
     }
     setFileError('')
