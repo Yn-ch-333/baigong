@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS messages (
   file_id TEXT,
   file_name TEXT,
   file_size INTEGER,
-  file_type TEXT
+  file_type TEXT,
+  files TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS collections (

@@ -135,6 +135,7 @@ async function ensureSchema(env: Env): Promise<void> {
     'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
     'ALTER TABLE categories ADD COLUMN moderator_id TEXT',
     'CREATE TABLE IF NOT EXISTS sms_codes (id TEXT PRIMARY KEY, phone TEXT NOT NULL, code TEXT NOT NULL, purpose TEXT NOT NULL, user_id TEXT, attempts INTEGER DEFAULT 0, used INTEGER DEFAULT 0, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)',
+    "ALTER TABLE messages ADD COLUMN files TEXT DEFAULT ''",
   ]
   for (const sql of statements) {
     try {
@@ -472,6 +473,19 @@ function toComment(r: any) {
 }
 
 function toMessage(r: any) {
+  // 附件以 JSON 数组存储；历史单附件消息回退到 file_* 列
+  let attachments: any[] = []
+  if (r.files) {
+    try {
+      const parsed = JSON.parse(r.files)
+      if (Array.isArray(parsed)) attachments = parsed
+    } catch {
+      attachments = []
+    }
+  }
+  if (attachments.length === 0 && r.file_id) {
+    attachments = [{ id: r.file_id, name: r.file_name || '文件', size: r.file_size || 0, type: r.file_type || '' }]
+  }
   return {
     id: r.id,
     senderId: r.sender_id,
@@ -482,9 +496,7 @@ function toMessage(r: any) {
     date: r.date || '',
     read: !!r.read,
     recalled: !!r.recalled,
-    file: r.file_id
-      ? { id: r.file_id, name: r.file_name || '文件', size: r.file_size || 0, type: r.file_type || '' }
-      : undefined,
+    attachments: attachments.length > 0 ? attachments : undefined,
   }
 }
 
@@ -1202,17 +1214,20 @@ async function sendMessage(req: Request, env: Env): Promise<Response> {
   const body = await parseBody(req)
   const receiverId = String(body.receiverId || '').trim()
   const content = String(body.content || '').trim()
-  const fileId = String(body.fileId || '').trim()
-  if (!content && !fileId) return err('私信内容不能为空', 400)
+  const fileIds = Array.isArray(body.fileIds)
+    ? body.fileIds.map((v: unknown) => String(v || '').trim()).filter(Boolean).slice(0, 20)
+    : []
+  if (!content && fileIds.length === 0) return err('私信内容不能为空', 400)
   const receiver = await env.DB.prepare('SELECT id, name FROM users WHERE id = ?').bind(receiverId).first<{ id: string; name: string }>()
   if (!receiver) return err('接收人不存在', 404)
-  let file: any = null
-  if (fileId) {
-    file = await env.DB.prepare('SELECT id, name, size, type, uploader_id FROM files WHERE id = ?')
+  const attachments: any[] = []
+  for (const fileId of fileIds) {
+    const row = await env.DB.prepare('SELECT id, name, size, type, uploader_id FROM files WHERE id = ?')
       .bind(fileId)
       .first<any>()
-    if (!file) return err('附件不存在，请重新上传', 400)
-    if (file.uploader_id !== u.id) return err('无权使用该附件', 403)
+    if (!row) return err('附件不存在，请重新上传', 400)
+    if (row.uploader_id !== u.id) return err('无权使用该附件', 403)
+    attachments.push({ id: row.id, name: row.name || '文件', size: row.size || 0, type: row.type || '' })
   }
   const message = {
     id: crypto.randomUUID(),
@@ -1224,17 +1239,15 @@ async function sendMessage(req: Request, env: Env): Promise<Response> {
     date: nowDateTime(),
     read: false,
     recalled: false,
-    file: file
-      ? { id: file.id, name: file.name || '文件', size: file.size || 0, type: file.type || '' }
-      : undefined,
+    attachments: attachments.length > 0 ? attachments : undefined,
   }
   await env.DB.prepare(
-    'INSERT INTO messages (id, sender_id, sender_name, receiver_id, receiver_name, content, date, read, recalled, file_id, file_name, file_size, file_type) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)'
+    'INSERT INTO messages (id, sender_id, sender_name, receiver_id, receiver_name, content, date, read, recalled, files) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)'
   )
     .bind(
       message.id, u.id, u.name, receiver.id, receiver.name, content, message.date,
-      file ? file.id : null, file ? file.name : null, file ? file.size : null, file ? file.type : null
+      attachments.length > 0 ? JSON.stringify(attachments) : ''
     )
     .run()
   return json({ message })
@@ -1250,7 +1263,7 @@ async function recallMessage(req: Request, env: Env, params: string[]): Promise<
   const sentAt = parseDateTimeMs(row.date)
   if (!sentAt || Date.now() - sentAt > 3 * 60 * 1000) return err('发送超过 3 分钟的消息不能撤回', 400)
   await env.DB.prepare(
-    'UPDATE messages SET recalled = 1, content = \'\', file_id = NULL, file_name = NULL, file_size = NULL, file_type = NULL WHERE id = ?'
+    'UPDATE messages SET recalled = 1, content = \'\', file_id = NULL, file_name = NULL, file_size = NULL, file_type = NULL, files = \'\' WHERE id = ?'
   )
     .bind(row.id)
     .run()

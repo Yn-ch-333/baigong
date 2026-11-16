@@ -55,11 +55,13 @@ function App() {
 
   const incomingText = (m: Message) => {
     if (m.recalled) return '撤回了一条消息'
-    if (m.file) {
-      const kind = m.file.type.startsWith('image/')
+    const first = m.attachments?.[0]
+    if (first) {
+      const kind = first.type.startsWith('image/')
         ? '[图片]'
-        : m.file.type.startsWith('video/') ? '[视频]' : '[文件]'
-      return m.content ? `${kind} ${m.content}` : kind
+        : first.type.startsWith('video/') ? '[视频]' : '[文件]'
+      const more = m.attachments && m.attachments.length > 1 ? ` 等 ${m.attachments.length} 个附件` : ''
+      return m.content ? `${kind}${more} ${m.content}` : `${kind}${more}`
     }
     return m.content
   }
@@ -262,10 +264,11 @@ function App() {
     setCategories(prev => prev.filter(c => c.id !== categoryId))
   }, [])
 
-  const handleSendMessage = useCallback((receiverId: string, content: string, fileId?: string) => {
+  const handleSendMessage = useCallback((receiverId: string, content: string, fileIds?: string[]) => {
     const trimmed = content.trim()
-    if (!trimmed && !fileId) return
-    api.sendMessage(receiverId, trimmed, fileId).then(({ message }) => {
+    const ids = fileIds || []
+    if (!trimmed && ids.length === 0) return
+    api.sendMessage(receiverId, trimmed, ids).then(({ message }) => {
       setMessages(prev => [...prev, message])
     }).catch(err => console.error('发送私信失败', err))
   }, [])
@@ -273,7 +276,7 @@ function App() {
   const handleRecallMessage = useCallback(async (messageId: string) => {
     await api.recallMessage(messageId)
     setMessages(prev => prev.map(m => (
-      m.id === messageId ? { ...m, recalled: true, content: '', file: undefined } : m
+      m.id === messageId ? { ...m, recalled: true, content: '', attachments: undefined } : m
     )))
   }, [])
 

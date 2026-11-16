@@ -6,7 +6,7 @@ import { COUNTRY_OPTIONS } from './WorldMap'
 import SmsCodeField from './SmsCodeField'
 import {
   IconHome, IconWarehouse, IconSettings, IconShield,
-  IconMail, IconUser, IconPlus, IconClose, IconPaperclip,
+  IconMail, IconUser, IconPlus, IconClose, IconPaperclip, IconFolder,
 } from '../icons'
 import './Layout.css'
 
@@ -59,6 +59,7 @@ export default function Layout({
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [fileError, setFileError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const idleTimerRef = useRef<number | null>(null)
   const pausedRef = useRef(false)
@@ -211,11 +212,15 @@ export default function Layout({
 
   const handlePickFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files || [])
+    e.target.value = ''
     if (picked.length === 0) return
+    if (pendingFiles.length + picked.length > 50) {
+      setFileError('单个帖子最多 50 个附件，请分批发布')
+      return
+    }
     setFileError('')
     setPendingFiles(prev => [...prev, ...picked])
-    e.target.value = ''
-  }, [])
+  }, [pendingFiles.length])
 
   const removePendingFile = useCallback((index: number) => {
     setPendingFiles(prev => prev.filter((_, i) => i !== index))
@@ -528,12 +533,24 @@ export default function Layout({
                   multiple
                   className="post-file-input"
                   onChange={handlePickFiles}
-                  aria-label="选择附件文件"
+                  aria-label="选择附件文件或图片"
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  className="post-file-input"
+                  onChange={handlePickFiles}
+                  aria-label="选择文件夹"
+                  {...({ webkitdirectory: '', directory: '' } as any)}
                 />
                 <button type="button" className="post-file-add" onClick={() => fileInputRef.current?.click()}>
-                  <IconPaperclip /> 添加附件
+                  <IconPaperclip /> 添加文件/图片
                 </button>
-                <span className="post-file-hint">不限文件大小，附件将存入仓库，支持在线预览</span>
+                <button type="button" className="post-file-add" onClick={() => folderInputRef.current?.click()}>
+                  <IconFolder /> 添加文件夹
+                </button>
+                <span className="post-file-hint">支持一次选择多个文件、图片，或直接上传整个文件夹；附件将存入仓库，支持在线预览</span>
                 {pendingFiles.length > 0 && (
                   <div className="post-file-list">
                     {pendingFiles.map((f, i) => (

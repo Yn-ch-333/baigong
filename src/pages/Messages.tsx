@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Message, Attachment } from '../types'
 import {
   IconMail, IconPlus, IconUser, IconSparkles, IconClose,
-  IconPaperclip, IconEye, IconDownload, IconFile,
+  IconPaperclip, IconEye, IconDownload, IconFile, IconFolder,
 } from '../icons'
 import {
   avatarUrl, avatarInitial, fileUrl, formatFileSize, getPreviewKind, downloadAttachment,
@@ -16,7 +16,7 @@ interface MessagesProps {
   users: User[]
   messages: Message[]
   initialTargetId?: string
-  onSend: (receiverId: string, content: string, fileId?: string) => void
+  onSend: (receiverId: string, content: string, fileIds?: string[]) => void
   onMarkRead: (messageId: string) => void
   onRecall: (messageId: string) => Promise<void>
 }
@@ -95,7 +95,7 @@ export default function Messages({
   const [draft, setDraft] = useState('')
   const [newOpen, setNewOpen] = useState(false)
   const [newTargetId, setNewTargetId] = useState('')
-  const [pendingFile, setPendingFile] = useState<Attachment | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
   const [fileError, setFileError] = useState('')
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
@@ -104,6 +104,7 @@ export default function Messages({
   ))
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const self = currentUser || { id: 'guest', name: '访客', avatar: '客' }
 
@@ -153,27 +154,38 @@ export default function Messages({
   const handleSend = () => {
     const content = draft.trim()
     if (!selectedUser || uploading) return
-    if (!content && !pendingFile) return
-    onSend(selectedUser.id, content, pendingFile?.id)
+    if (!content && pendingFiles.length === 0) return
+    onSend(selectedUser.id, content, pendingFiles.map(f => f.id))
     setDraft('')
-    setPendingFile(null)
+    setPendingFiles([])
     setFileError('')
   }
 
-  const handlePickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handlePickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
     e.target.value = ''
-    if (!file) return
+    if (files.length === 0) return
+    if (pendingFiles.length + files.length > 20) {
+      setFileError('单条私信最多发送 20 个附件，请分批发送')
+      return
+    }
     setFileError('')
     setUploading(true)
-    try {
-      const uploaded = await api.uploadFile(file)
-      setPendingFile(uploaded)
-    } catch (err) {
-      setFileError(err instanceof Error ? err.message : '附件上传失败')
-    } finally {
-      setUploading(false)
+    const uploaded: Attachment[] = []
+    for (const file of files) {
+      try {
+        uploaded.push(await api.uploadFile(file))
+      } catch (err) {
+        setFileError(err instanceof Error ? err.message : `「${file.name}」上传失败`)
+        break
+      }
     }
+    if (uploaded.length > 0) setPendingFiles(prev => [...prev, ...uploaded])
+    setUploading(false)
+  }
+
+  const removePendingFile = (id: string) => {
+    setPendingFiles(prev => prev.filter(f => f.id !== id))
   }
 
   const handleRecall = async (m: Message) => {
@@ -283,7 +295,7 @@ export default function Messages({
             <div className="messages-bubble-list">
               {thread.map(m => {
                 const isSelf = m.senderId === self.id
-                const kind = m.file ? getPreviewKind(m.file.name, m.file.type) : null
+                const attachments = m.attachments || []
                 return (
                   <div key={m.id} className={`messages-bubble ${isSelf ? 'self' : ''}`}>
                     {m.recalled ? (
@@ -292,37 +304,49 @@ export default function Messages({
                       </div>
                     ) : (
                       <>
-                        {m.file && kind === 'image' && (
-                          <button className="messages-image-btn" onClick={() => setPreviewFile(m.file!)}>
-                            <img src={fileUrl(m.file.id)} alt={m.file.name} loading="lazy" />
-                          </button>
-                        )}
-                        {m.file && kind === 'video' && (
-                          <video
-                            className="messages-video"
-                            src={fileUrl(m.file.id)}
-                            controls
-                            preload="metadata"
-                            playsInline
-                          />
-                        )}
-                        {m.file && kind !== 'image' && kind !== 'video' && (
-                          <div className="messages-file-card">
-                            <IconFile />
-                            <div className="messages-file-info">
-                              <span className="messages-file-name">{m.file.name}</span>
-                              <span className="messages-file-size">{formatFileSize(m.file.size)}</span>
-                            </div>
-                            <button
-                              className="messages-file-action"
-                              onClick={() => setPreviewFile(m.file!)}
-                              aria-label="预览文件"
-                            ><IconEye /></button>
-                            <button
-                              className="messages-file-action"
-                              onClick={() => downloadAttachment(m.file!.id, m.file!.name)}
-                              aria-label="下载文件"
-                            ><IconDownload /></button>
+                        {attachments.length > 0 && (
+                          <div className="messages-attachments">
+                            {attachments.map(a => {
+                              const kind = getPreviewKind(a.name, a.type)
+                              if (kind === 'image') {
+                                return (
+                                  <button key={a.id} className="messages-image-btn" onClick={() => setPreviewFile(a)}>
+                                    <img src={fileUrl(a.id)} alt={a.name} loading="lazy" />
+                                  </button>
+                                )
+                              }
+                              if (kind === 'video') {
+                                return (
+                                  <video
+                                    key={a.id}
+                                    className="messages-video"
+                                    src={fileUrl(a.id)}
+                                    controls
+                                    preload="metadata"
+                                    playsInline
+                                  />
+                                )
+                              }
+                              return (
+                                <div key={a.id} className="messages-file-card">
+                                  <IconFile />
+                                  <div className="messages-file-info">
+                                    <span className="messages-file-name">{a.name}</span>
+                                    <span className="messages-file-size">{formatFileSize(a.size)}</span>
+                                  </div>
+                                  <button
+                                    className="messages-file-action"
+                                    onClick={() => setPreviewFile(a)}
+                                    aria-label="预览文件"
+                                  ><IconEye /></button>
+                                  <button
+                                    className="messages-file-action"
+                                    onClick={() => downloadAttachment(a.id, a.name)}
+                                    aria-label="下载文件"
+                                  ><IconDownload /></button>
+                                </div>
+                              )
+                            })}
                           </div>
                         )}
                         {m.content && <div className="messages-bubble-content">{m.content}</div>}
@@ -344,15 +368,19 @@ export default function Messages({
             </div>
 
             <div className="messages-composer">
-              {pendingFile && (
-                <div className="messages-pending-file">
-                  <span className="messages-pending-name">{pendingFile.name}</span>
-                  <span className="messages-pending-size">{formatFileSize(pendingFile.size)}</span>
-                  <button
-                    className="messages-pending-remove"
-                    onClick={() => setPendingFile(null)}
-                    aria-label="移除待发送附件"
-                  ><IconClose /></button>
+              {pendingFiles.length > 0 && (
+                <div className="messages-pending-list">
+                  {pendingFiles.map(f => (
+                    <div key={f.id} className="messages-pending-file">
+                      <span className="messages-pending-name">{f.name}</span>
+                      <span className="messages-pending-size">{formatFileSize(f.size)}</span>
+                      <button
+                        className="messages-pending-remove"
+                        onClick={() => removePendingFile(f.id)}
+                        aria-label={`移除 ${f.name}`}
+                      ><IconClose /></button>
+                    </div>
+                  ))}
                 </div>
               )}
               {fileError && <p className="login-error messages-file-error">{fileError}</p>}
@@ -360,18 +388,37 @@ export default function Messages({
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   className="messages-file-input"
-                  onChange={handlePickFile}
+                  onChange={handlePickFiles}
                   aria-label="选择私信附件"
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  className="messages-file-input"
+                  onChange={handlePickFiles}
+                  aria-label="选择文件夹"
+                  {...({ webkitdirectory: '', directory: '' } as any)}
                 />
                 <button
                   className="messages-attach-btn"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
                   aria-label="添加图片、视频或文件"
-                  title="添加图片、视频或文件（不计入仓库）"
+                  title="添加图片、视频或文件（可多选，不计入仓库）"
                 >
                   <IconPaperclip />
+                </button>
+                <button
+                  className="messages-attach-btn"
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={uploading}
+                  aria-label="发送文件夹"
+                  title="选择整个文件夹（含子文件夹）"
+                >
+                  <IconFolder />
                 </button>
                 <input
                   type="text"

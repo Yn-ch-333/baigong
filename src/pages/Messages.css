@@ -569,6 +569,25 @@
   font-size: 12px;
 }
 
+/* 一条私信可携带多个附件 */
+.messages-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 20px 0;
+}
+
+.messages-pending-list .messages-pending-file {
+  padding: 0;
+}
+
+.messages-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
 .messages-pending-name {
   max-width: 60%;
   overflow: hidden;

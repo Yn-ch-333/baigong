@@ -194,10 +194,12 @@ export function deleteWarehouseItem(id: string) {
   return request<{ ok: true }>(`/warehouse/${id}`, { method: 'DELETE' })
 }
 
-export function sendMessage(receiverId: string, content: string, fileId?: string) {
+export function sendMessage(receiverId: string, content: string, fileIds?: string[]) {
   return request<{ message: Message }>('/messages', {
     method: 'POST',
-    body: JSON.stringify(fileId ? { receiverId, content, fileId } : { receiverId, content }),
+    body: JSON.stringify(
+      fileIds && fileIds.length > 0 ? { receiverId, content, fileIds } : { receiverId, content },
+    ),
   })
 }
 
@@ -215,7 +217,9 @@ export function markMessageRead(id: string) {
 
 export function uploadFile(file: File): Promise<Attachment> {
   const fd = new FormData()
-  fd.append('file', file, file.name)
+  // 文件夹上传时保留相对路径，附件名更容易辨认
+  const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath
+  fd.append('file', file, relative || file.name)
   return request<Attachment>('/files', { method: 'POST', body: fd })
 }
 

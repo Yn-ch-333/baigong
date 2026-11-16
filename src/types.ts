@@ -79,7 +79,8 @@ export interface Message {
   date: string
   read?: boolean
   recalled?: boolean
-  file?: Attachment
+  /** 一条私信可携带多个附件 */
+  attachments?: Attachment[]
 }
 
 export interface WarehouseItem {
