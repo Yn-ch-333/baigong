@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { Post, Category, Comment, User, Attachment } from '../types'
-import { downloadAttachment, formatFileSize, fileUrl, getPreviewKind } from '../fileStore'
+import { downloadAttachment, formatFileSize, fileUrl, getPreviewKind, groupAttachments, attachmentPath } from '../fileStore'
 import FilePreview from '../components/FilePreview'
 import {
   IconChevronLeft, IconMessage, IconEye, IconBookmark,
   IconNewspaper, IconCode, IconPaperclip, IconDownload, IconFile,
-  IconClose,
+  IconClose, IconFolder,
 } from '../icons'
 import './PostDetail.css'
 import './PostList.css'
@@ -43,17 +43,24 @@ export default function PostDetail({
 }: PostDetailProps) {
   const [draft, setDraft] = useState('')
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
+  const [openFolders, setOpenFolders] = useState<string[]>([])
   const [replyTarget, setReplyTarget] = useState<Comment | null>(null)
 
   const pinnedPosts = useMemo(() => posts.filter(p => p.pinned).slice(0, 5), [posts])
 
   const attachments = post.attachments || []
-  const imageAttachments = attachments.filter(a => getPreviewKind(a.name, a.type) === 'image')
-  const videoAttachments = attachments.filter(a => getPreviewKind(a.name, a.type) === 'video')
-  const fileAttachments = attachments.filter(a => {
+  const attachmentGroups = groupAttachments(attachments)
+  const imageAttachments = attachmentGroups.loose.filter(a => getPreviewKind(a.name, a.type) === 'image')
+  const videoAttachments = attachmentGroups.loose.filter(a => getPreviewKind(a.name, a.type) === 'video')
+  const fileAttachments = attachmentGroups.loose.filter(a => {
     const kind = getPreviewKind(a.name, a.type)
     return kind !== 'image' && kind !== 'video'
   })
+  const folderFileCount = attachmentGroups.folders.reduce((sum, g) => sum + g.files.length, 0)
+
+  const toggleFolder = (name: string) => {
+    setOpenFolders(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])
+  }
 
   const commentMap = useMemo(() => {
     const m = new Map<string, Comment>()
@@ -223,6 +230,67 @@ export default function PostDetail({
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {attachmentGroups.folders.length > 0 && (
+            <div className="post-attachments">
+              <div className="post-attachments-head">
+                <IconFolder />
+                <span>文件夹 {attachmentGroups.folders.length} 个 · 共 {folderFileCount} 个文件 · 已存入仓库</span>
+              </div>
+              <div className="post-folder-list">
+                {attachmentGroups.folders.map(g => {
+                  const open = openFolders.includes(g.name)
+                  const totalSize = g.files.reduce((sum, f) => sum + f.size, 0)
+                  return (
+                    <div key={g.name} className="post-folder-entry">
+                      <button
+                        type="button"
+                        className="post-folder-entry-head"
+                        onClick={() => toggleFolder(g.name)}
+                        aria-expanded={open}
+                      >
+                        <span className={`post-folder-entry-chevron ${open ? 'open' : ''}`}><IconChevronLeft /></span>
+                        <IconFolder />
+                        <span className="post-folder-entry-name">{g.name}</span>
+                        <span className="post-folder-entry-meta">{g.files.length} 个文件 · {formatFileSize(totalSize)}</span>
+                      </button>
+                      {open && (
+                        <div className="post-folder-entry-files">
+                          {g.files.map(a => (
+                            <div key={a.id} className="post-attachment-item post-folder-entry-file">
+                              <span className="post-attachment-icon"><IconFile /></span>
+                              <button
+                                className="post-attachment-name post-attachment-preview-link"
+                                onClick={() => setPreviewFile(a)}
+                                title={`在线预览 ${a.name}`}
+                              >
+                                {attachmentPath(a, g.name)}
+                              </button>
+                              <span className="post-attachment-size">{formatFileSize(a.size)}</span>
+                              <button
+                                className="post-attachment-download"
+                                onClick={() => setPreviewFile(a)}
+                                aria-label={`预览 ${a.name}`}
+                              >
+                                <IconEye /> 查看
+                              </button>
+                              <button
+                                className="post-attachment-download"
+                                onClick={() => downloadAttachment(a.id, a.name)}
+                                aria-label={`下载 ${a.name}`}
+                              >
+                                <IconDownload /> 下载
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 

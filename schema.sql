@@ -94,7 +94,8 @@ CREATE TABLE IF NOT EXISTS files (
   type TEXT,
   uploader_id TEXT,
   created_at INTEGER,
-  post_id TEXT
+  post_id TEXT,
+  folder TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS tracks (

@@ -575,10 +575,107 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 20px 0;
+  max-height: 132px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .messages-pending-list .messages-pending-file {
   padding: 0;
+}
+
+/* ===== 文件夹合并展示 ===== */
+.messages-pending-folder-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-2);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.messages-pending-folder-toggle > svg {
+  flex: 0 0 auto;
+  color: var(--brass);
+}
+
+.messages-pending-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 4px 26px;
+}
+
+.messages-folder-chevron {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+  transform: rotate(180deg);
+  transition: transform 140ms ease;
+}
+
+.messages-folder-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+.messages-folder-chevron.open {
+  transform: rotate(-90deg);
+}
+
+.messages-folder-card {
+  max-width: 280px;
+  border: 1px dashed var(--green-line);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.messages-folder-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.messages-folder-head > svg {
+  flex: 0 0 auto;
+  color: var(--brass);
+}
+
+.messages-folder-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-folder-meta {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+  font-size: 10px;
+}
+
+.messages-folder-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
 .messages-attachments {
@@ -623,4 +720,14 @@
 .messages-file-error {
   padding: 6px 20px 0;
   margin: 0;
+}
+
+.messages-upload-hint {
+  margin: 0;
+  padding: 6px 20px 0;
+  color: var(--brass);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

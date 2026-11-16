@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Message, Attachment } from '../types'
 import {
   IconMail, IconPlus, IconUser, IconSparkles, IconClose,
-  IconPaperclip, IconEye, IconDownload, IconFile, IconFolder,
+  IconPaperclip, IconEye, IconDownload, IconFile, IconFolder, IconChevronLeft,
 } from '../icons'
 import {
   avatarUrl, avatarInitial, fileUrl, formatFileSize, getPreviewKind, downloadAttachment,
+  groupAttachments, attachmentPath,
 } from '../fileStore'
 import * as api from '../api'
 import FilePreview from '../components/FilePreview'
@@ -16,7 +17,7 @@ interface MessagesProps {
   users: User[]
   messages: Message[]
   initialTargetId?: string
-  onSend: (receiverId: string, content: string, fileIds?: string[]) => void
+  onSend: (receiverId: string, content: string, fileIds?: string[]) => Promise<void> | void
   onMarkRead: (messageId: string) => void
   onRecall: (messageId: string) => Promise<void>
 }
@@ -97,14 +98,30 @@ export default function Messages({
   const [newTargetId, setNewTargetId] = useState('')
   const [pendingFiles, setPendingFiles] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadPercent, setUploadPercent] = useState(0)
+  const [uploadingName, setUploadingName] = useState('')
+  const [sending, setSending] = useState(false)
+  const [toast, setToast] = useState('')
   const [fileError, setFileError] = useState('')
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
+  const [openFolders, setOpenFolders] = useState<string[]>([])
   const [notifyPermission, setNotifyPermission] = useState<string>(() => (
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   ))
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const toastTimerRef = useRef<number | null>(null)
+
+  const showToast = (message: string) => {
+    setToast(message)
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToast(''), 3200)
+  }
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+  }, [])
 
   const self = currentUser || { id: 'guest', name: '访客', avatar: '客' }
 
@@ -151,14 +168,23 @@ export default function Messages({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const content = draft.trim()
-    if (!selectedUser || uploading) return
+    if (!selectedUser || uploading || sending) return
     if (!content && pendingFiles.length === 0) return
-    onSend(selectedUser.id, content, pendingFiles.map(f => f.id))
-    setDraft('')
-    setPendingFiles([])
+    setSending(true)
     setFileError('')
+    try {
+      await onSend(selectedUser.id, content, pendingFiles.map(f => f.id))
+      setDraft('')
+      setPendingFiles([])
+      setFileError('')
+      showToast('消息已发送')
+    } catch (err) {
+      setFileError(`发送失败：${err instanceof Error ? err.message : '请稍后重试'}`)
+    } finally {
+      setSending(false)
+    }
   }
 
   const handlePickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,21 +197,102 @@ export default function Messages({
     }
     setFileError('')
     setUploading(true)
-    const uploaded: Attachment[] = []
-    for (const file of files) {
-      try {
-        uploaded.push(await api.uploadFile(file))
-      } catch (err) {
-        setFileError(err instanceof Error ? err.message : `「${file.name}」上传失败`)
-        break
+    setUploadPercent(0)
+    setUploadingName(files[0].name)
+
+    const total = files.length
+    const progress = new Map<File, number>()
+    const updateOverall = () => {
+      const sum = files.reduce((acc, f) => acc + (progress.get(f) || 0), 0)
+      setUploadPercent(Math.round(sum / total))
+    }
+    const results: Array<Attachment | undefined> = new Array(total)
+    const errors: string[] = []
+    let cursor = 0
+    let aborted = false
+
+    // 并发 3 个上传，图片/视频较多时不必逐个等待
+    const worker = async () => {
+      while (!aborted && cursor < total) {
+        const index = cursor++
+        const file = files[index]
+        setUploadingName(file.name)
+        try {
+          results[index] = await api.uploadFile(file, pct => {
+            progress.set(file, pct)
+            updateOverall()
+          })
+        } catch (err) {
+          aborted = true
+          errors.push(`「${file.name}」${err instanceof Error ? err.message : '上传失败'}`)
+        }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(3, total) }, worker))
+
+    const uploaded = results.filter((a): a is Attachment => !!a)
     if (uploaded.length > 0) setPendingFiles(prev => [...prev, ...uploaded])
+    if (errors.length > 0) setFileError(`上传失败：${errors[0]}`)
     setUploading(false)
+    setUploadingName('')
+    setUploadPercent(0)
   }
 
   const removePendingFile = (id: string) => {
     setPendingFiles(prev => prev.filter(f => f.id !== id))
+  }
+
+  const toggleFolder = (key: string) => {
+    setOpenFolders(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  }
+
+  // 整文件夹上传的附件按顶层文件夹合并成一条
+  const pendingGroups = useMemo(() => groupAttachments(pendingFiles), [pendingFiles])
+
+  const removePendingFolder = (name: string) => {
+    setPendingFiles(prev => prev.filter(f => (f.folder || '').split('/')[0] !== name))
+  }
+
+  const renderAttachment = (a: Attachment) => {
+    const kind = getPreviewKind(a.name, a.type)
+    if (kind === 'image') {
+      return (
+        <button key={a.id} className="messages-image-btn" onClick={() => setPreviewFile(a)}>
+          <img src={fileUrl(a.id)} alt={a.name} loading="lazy" />
+        </button>
+      )
+    }
+    if (kind === 'video') {
+      return (
+        <video
+          key={a.id}
+          className="messages-video"
+          src={fileUrl(a.id)}
+          controls
+          preload="metadata"
+          playsInline
+        />
+      )
+    }
+    return (
+      <div key={a.id} className="messages-file-card">
+        <IconFile />
+        <div className="messages-file-info">
+          <span className="messages-file-name">{a.name}</span>
+          <span className="messages-file-size">{formatFileSize(a.size)}</span>
+        </div>
+        <button
+          className="messages-file-action"
+          onClick={() => setPreviewFile(a)}
+          aria-label="预览文件"
+        ><IconEye /></button>
+        <button
+          className="messages-file-action"
+          onClick={() => downloadAttachment(a.id, a.name)}
+          aria-label="下载文件"
+        ><IconDownload /></button>
+      </div>
+    )
   }
 
   const handleRecall = async (m: Message) => {
@@ -296,6 +403,7 @@ export default function Messages({
               {thread.map(m => {
                 const isSelf = m.senderId === self.id
                 const attachments = m.attachments || []
+                const attachmentGroups = groupAttachments(attachments)
                 return (
                   <div key={m.id} className={`messages-bubble ${isSelf ? 'self' : ''}`}>
                     {m.recalled ? (
@@ -306,44 +414,29 @@ export default function Messages({
                       <>
                         {attachments.length > 0 && (
                           <div className="messages-attachments">
-                            {attachments.map(a => {
-                              const kind = getPreviewKind(a.name, a.type)
-                              if (kind === 'image') {
-                                return (
-                                  <button key={a.id} className="messages-image-btn" onClick={() => setPreviewFile(a)}>
-                                    <img src={fileUrl(a.id)} alt={a.name} loading="lazy" />
-                                  </button>
-                                )
-                              }
-                              if (kind === 'video') {
-                                return (
-                                  <video
-                                    key={a.id}
-                                    className="messages-video"
-                                    src={fileUrl(a.id)}
-                                    controls
-                                    preload="metadata"
-                                    playsInline
-                                  />
-                                )
-                              }
+                            {attachmentGroups.loose.map(renderAttachment)}
+                            {attachmentGroups.folders.map(g => {
+                              const key = `${m.id}:${g.name}`
+                              const open = openFolders.includes(key)
+                              const totalSize = g.files.reduce((sum, f) => sum + f.size, 0)
                               return (
-                                <div key={a.id} className="messages-file-card">
-                                  <IconFile />
-                                  <div className="messages-file-info">
-                                    <span className="messages-file-name">{a.name}</span>
-                                    <span className="messages-file-size">{formatFileSize(a.size)}</span>
-                                  </div>
+                                <div key={key} className="messages-folder-card">
                                   <button
-                                    className="messages-file-action"
-                                    onClick={() => setPreviewFile(a)}
-                                    aria-label="预览文件"
-                                  ><IconEye /></button>
-                                  <button
-                                    className="messages-file-action"
-                                    onClick={() => downloadAttachment(a.id, a.name)}
-                                    aria-label="下载文件"
-                                  ><IconDownload /></button>
+                                    type="button"
+                                    className="messages-folder-head"
+                                    onClick={() => toggleFolder(key)}
+                                    aria-expanded={open}
+                                  >
+                                    <span className={`messages-folder-chevron ${open ? 'open' : ''}`}><IconChevronLeft /></span>
+                                    <IconFolder />
+                                    <span className="messages-folder-name">{g.name}</span>
+                                    <span className="messages-folder-meta">{g.files.length} 个文件 · {formatFileSize(totalSize)}</span>
+                                  </button>
+                                  {open && (
+                                    <div className="messages-folder-files">
+                                      {g.files.map(renderAttachment)}
+                                    </div>
+                                  )}
                                 </div>
                               )
                             })}
@@ -370,7 +463,49 @@ export default function Messages({
             <div className="messages-composer">
               {pendingFiles.length > 0 && (
                 <div className="messages-pending-list">
-                  {pendingFiles.map(f => (
+                  {pendingGroups.folders.map(g => {
+                    const key = `pending:${g.name}`
+                    const open = openFolders.includes(key)
+                    const totalSize = g.files.reduce((sum, f) => sum + f.size, 0)
+                    return (
+                      <div key={key} className="messages-pending-folder">
+                        <div className="messages-pending-file">
+                          <button
+                            type="button"
+                            className="messages-pending-folder-toggle"
+                            onClick={() => toggleFolder(key)}
+                            aria-expanded={open}
+                          >
+                            <span className={`messages-folder-chevron ${open ? 'open' : ''}`}><IconChevronLeft /></span>
+                            <IconFolder />
+                            <span className="messages-pending-name">{g.name}</span>
+                            <span className="messages-pending-size">{g.files.length} 个文件 · {formatFileSize(totalSize)}</span>
+                          </button>
+                          <button
+                            className="messages-pending-remove"
+                            onClick={() => removePendingFolder(g.name)}
+                            aria-label={`移除文件夹 ${g.name}`}
+                          ><IconClose /></button>
+                        </div>
+                        {open && (
+                          <div className="messages-pending-children">
+                            {g.files.map(f => (
+                              <div key={f.id} className="messages-pending-file">
+                                <span className="messages-pending-name">{attachmentPath(f, g.name)}</span>
+                                <span className="messages-pending-size">{formatFileSize(f.size)}</span>
+                                <button
+                                  className="messages-pending-remove"
+                                  onClick={() => removePendingFile(f.id)}
+                                  aria-label={`移除 ${f.name}`}
+                                ><IconClose /></button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {pendingGroups.loose.map(f => (
                     <div key={f.id} className="messages-pending-file">
                       <span className="messages-pending-name">{f.name}</span>
                       <span className="messages-pending-size">{formatFileSize(f.size)}</span>
@@ -382,6 +517,11 @@ export default function Messages({
                     </div>
                   ))}
                 </div>
+              )}
+              {uploading && (
+                <p className="messages-upload-hint">
+                  正在上传 {uploadPercent}%{uploadingName ? ` · ${uploadingName}` : ''}
+                </p>
               )}
               {fileError && <p className="login-error messages-file-error">{fileError}</p>}
               <div className="messages-input-bar">
@@ -405,7 +545,7 @@ export default function Messages({
                 <button
                   className="messages-attach-btn"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
+                  disabled={uploading || sending}
                   aria-label="添加图片、视频或文件"
                   title="添加图片、视频或文件（可多选，不计入仓库）"
                 >
@@ -414,7 +554,7 @@ export default function Messages({
                 <button
                   className="messages-attach-btn"
                   onClick={() => folderInputRef.current?.click()}
-                  disabled={uploading}
+                  disabled={uploading || sending}
                   aria-label="发送文件夹"
                   title="选择整个文件夹（含子文件夹）"
                 >
@@ -423,7 +563,7 @@ export default function Messages({
                 <input
                   type="text"
                   className="messages-input"
-                  placeholder={uploading ? '附件上传中…' : `给 ${selectedUser.name} 发消息…`}
+                  placeholder={uploading ? '附件上传中…' : sending ? '发送中…' : `给 ${selectedUser.name} 发消息…`}
                   value={draft}
                   onChange={e => setDraft(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSend()}
@@ -431,8 +571,8 @@ export default function Messages({
                 <button
                   className="messages-send-btn"
                   onClick={handleSend}
-                  disabled={uploading}
-                  aria-label="发送"
+                  disabled={uploading || sending}
+                  aria-label={sending ? '发送中' : '发送'}
                 >
                   <IconSend />
                 </button>
@@ -475,6 +615,8 @@ export default function Messages({
           </div>
         </div>
       )}
+
+      {toast && <div className="app-toast" role="status">{toast}</div>}
     </div>
   )
 }

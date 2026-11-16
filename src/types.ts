@@ -19,6 +19,8 @@ export interface Attachment {
   name: string
   size: number
   type: string
+  /** 所属文件夹的相对路径（来自整文件夹上传），普通文件为空 */
+  folder?: string
 }
 
 export interface Post {

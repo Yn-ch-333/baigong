@@ -136,6 +136,7 @@ async function ensureSchema(env: Env): Promise<void> {
     'ALTER TABLE categories ADD COLUMN moderator_id TEXT',
     'CREATE TABLE IF NOT EXISTS sms_codes (id TEXT PRIMARY KEY, phone TEXT NOT NULL, code TEXT NOT NULL, purpose TEXT NOT NULL, user_id TEXT, attempts INTEGER DEFAULT 0, used INTEGER DEFAULT 0, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)',
     "ALTER TABLE messages ADD COLUMN files TEXT DEFAULT ''",
+    "ALTER TABLE files ADD COLUMN folder TEXT DEFAULT ''",
   ]
   for (const sql of statements) {
     try {
@@ -441,7 +442,7 @@ async function sendSmsCode(req: Request, env: Env): Promise<Response> {
 }
 
 function toAttachment(f: any) {
-  return { id: f.id, name: f.name, size: f.size, type: f.type }
+  return { id: f.id, name: f.name, size: f.size, type: f.type, folder: f.folder || undefined }
 }
 
 function toPost(row: any, commentCount: number, attachments: any[]) {
@@ -577,7 +578,7 @@ async function loadPost(env: Env, id: string) {
   const row = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
   if (!row) return null
   const cc = await env.DB.prepare('SELECT COUNT(*) AS c FROM comments WHERE post_id = ?').bind(id).first<{ c: number }>()
-  const files = await env.DB.prepare('SELECT id, name, size, type FROM files WHERE post_id = ?').bind(id).all<any>()
+  const files = await env.DB.prepare('SELECT id, name, size, type, folder FROM files WHERE post_id = ?').bind(id).all<any>()
   return toPost(row, cc?.c || 0, files.results || [])
 }
 
@@ -698,7 +699,7 @@ async function bootstrap(req: Request, env: Env): Promise<Response> {
   const posts = await env.DB.prepare('SELECT * FROM posts ORDER BY pinned DESC, date DESC').all<any>()
   const comments = await env.DB.prepare('SELECT * FROM comments ORDER BY date ASC').all<any>()
   const warehouse = await env.DB.prepare('SELECT * FROM warehouse').all<any>()
-  const files = await env.DB.prepare('SELECT id, name, size, type, post_id FROM files WHERE post_id IS NOT NULL').all<any>()
+  const files = await env.DB.prepare('SELECT id, name, size, type, folder, post_id FROM files WHERE post_id IS NOT NULL').all<any>()
   const counts = await env.DB.prepare('SELECT post_id, COUNT(*) AS c FROM comments GROUP BY post_id').all<any>()
 
   const filesByPost = new Map<string, any[]>()
@@ -1222,12 +1223,18 @@ async function sendMessage(req: Request, env: Env): Promise<Response> {
   if (!receiver) return err('接收人不存在', 404)
   const attachments: any[] = []
   for (const fileId of fileIds) {
-    const row = await env.DB.prepare('SELECT id, name, size, type, uploader_id FROM files WHERE id = ?')
+    const row = await env.DB.prepare('SELECT id, name, size, type, folder, uploader_id FROM files WHERE id = ?')
       .bind(fileId)
       .first<any>()
     if (!row) return err('附件不存在，请重新上传', 400)
     if (row.uploader_id !== u.id) return err('无权使用该附件', 403)
-    attachments.push({ id: row.id, name: row.name || '文件', size: row.size || 0, type: row.type || '' })
+    attachments.push({
+      id: row.id,
+      name: row.name || '文件',
+      size: row.size || 0,
+      type: row.type || '',
+      folder: row.folder || undefined,
+    })
   }
   const message = {
     id: crypto.randomUUID(),
@@ -1290,12 +1297,16 @@ async function uploadFile(req: Request, env: Env): Promise<Response> {
   if (f.size > 25 * 1024 * 1024) return err('文件超过 25MB（免费版单文件上限），请压缩后上传', 413)
   const buf = await f.arrayBuffer()
   await env.FILES.put(id, buf, { metadata: { contentType: type } })
+  const rawFolder = form.get('folder')
+  const folder = typeof rawFolder === 'string'
+    ? rawFolder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').slice(0, 300)
+    : ''
   await env.DB.prepare(
-    'INSERT INTO files (id, name, size, type, uploader_id, created_at, post_id) VALUES (?, ?, ?, ?, ?, ?, NULL)'
+    'INSERT INTO files (id, name, size, type, uploader_id, created_at, post_id, folder) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)'
   )
-    .bind(id, f.name, f.size, type, u.id, Date.now())
+    .bind(id, f.name, f.size, type, u.id, Date.now(), folder)
     .run()
-  return json({ id, name: f.name, size: f.size, type })
+  return json({ id, name: f.name, size: f.size, type, folder: folder || undefined })
 }
 
 async function getFile(_req: Request, env: Env, params: string[], url: URL): Promise<Response> {

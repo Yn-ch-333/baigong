@@ -149,6 +149,78 @@
   margin-bottom: 8px;
 }
 
+/* 整文件夹上传的附件：按文件夹合并，展开后再看具体文件 */
+.post-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.post-folder-entry {
+  border: 1px dashed var(--green-line);
+  border-radius: 4px;
+  background: rgba(10, 10, 11, 0.4);
+}
+
+.post-folder-entry-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.post-folder-entry-head > svg {
+  flex: 0 0 auto;
+  color: var(--brass);
+}
+
+.post-folder-entry-chevron {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+  transform: rotate(180deg);
+  transition: transform 140ms ease;
+}
+
+.post-folder-entry-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+.post-folder-entry-chevron.open {
+  transform: rotate(-90deg);
+}
+
+.post-folder-entry-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-folder-entry-meta {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+  font-size: 11px;
+}
+
+.post-folder-entry-files {
+  padding: 0 10px 4px 28px;
+}
+
+.post-folder-entry-file {
+  border-top-color: transparent;
+}
+
 .post-attachment-item {
   display: flex;
   align-items: center;

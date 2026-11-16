@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { User, WarehouseItem, Post, Attachment } from '../types'
-import { downloadAttachment, formatFileSize } from '../fileStore'
+import { downloadAttachment, formatFileSize, groupAttachments, attachmentPath } from '../fileStore'
 import FilePreview from '../components/FilePreview'
 import {
   IconWarehouse, IconFilter, IconPlus, IconClose,
-  IconFile, IconDownload, IconEye,
+  IconFile, IconDownload, IconEye, IconFolder, IconChevronLeft,
 } from '../icons'
 import './Warehouse.css'
 
@@ -34,6 +34,7 @@ interface FileRecord {
   name: string
   size: number
   type: string
+  folder?: string
   postId: string
   postTitle: string
   uploader: string
@@ -55,6 +56,7 @@ export default function Warehouse({
   const [addOpen, setAddOpen] = useState(false)
   const [tab, setTab] = useState<'files' | 'items'>('files')
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null)
+  const [openFolders, setOpenFolders] = useState<string[]>([])
 
   const allFiles = useMemo<FileRecord[]>(() => (
     posts.flatMap(p =>
@@ -78,9 +80,68 @@ export default function Warehouse({
     if (!q) return allFiles
     return allFiles.filter(f =>
       f.name.toLowerCase().includes(q.toLowerCase()) ||
+      (f.folder || '').toLowerCase().includes(q.toLowerCase()) ||
       f.postTitle.includes(q) || f.uploader.includes(q)
     )
   }, [allFiles, fileSearch])
+
+  // 整文件夹上传的文件在档案里合并为一个文件夹条目
+  const fileGroups = useMemo(() => groupAttachments(filteredFiles), [filteredFiles])
+
+  const toggleFolder = (name: string) => {
+    setOpenFolders(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])
+  }
+
+  const renderFileRow = (f: FileRecord, topFolder?: string) => (
+    <tr key={f.id} className={topFolder ? 'warehouse-folder-child' : undefined}>
+      <td className="warehouse-name">
+        <span className="warehouse-file-cell">
+          <IconFile />
+          {topFolder ? attachmentPath(f, topFolder) : f.name}
+        </span>
+      </td>
+      <td>{formatFileSize(f.size)}</td>
+      <td>
+        <button
+          className="warehouse-post-link"
+          onClick={() => onViewPost(f.postId)}
+          title={f.postTitle}
+        >
+          {f.postTitle}
+        </button>
+      </td>
+      <td>{f.uploader}</td>
+      <td>{f.date}</td>
+      <td>
+        <div className="warehouse-file-actions">
+          <button
+            className="warehouse-file-btn"
+            onClick={() => setPreviewFile({ id: f.id, name: f.name, size: f.size, type: f.type, folder: f.folder })}
+            aria-label={`预览 ${f.name}`}
+            title="在线预览"
+          >
+            <IconEye />
+          </button>
+          <button
+            className="warehouse-file-btn"
+            onClick={() => downloadAttachment(f.id, f.name)}
+            aria-label={`下载 ${f.name}`}
+            title="下载"
+          >
+            <IconDownload />
+          </button>
+          <button
+            className="warehouse-delete-btn"
+            onClick={() => onDeleteAttachment(f.postId, f.id)}
+            aria-label={`删除 ${f.name}`}
+            title="删除"
+          >
+            <IconTrash />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
 
   const filteredItems = useMemo(() => {
     return items.filter(i =>
@@ -188,56 +249,31 @@ export default function Warehouse({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredFiles.map(f => (
-                    <tr key={f.id}>
-                      <td className="warehouse-name">
-                        <span className="warehouse-file-cell">
-                          <IconFile />
-                          {f.name}
-                        </span>
-                      </td>
-                      <td>{formatFileSize(f.size)}</td>
-                      <td>
-                        <button
-                          className="warehouse-post-link"
-                          onClick={() => onViewPost(f.postId)}
-                          title={f.postTitle}
-                        >
-                          {f.postTitle}
-                        </button>
-                      </td>
-                      <td>{f.uploader}</td>
-                      <td>{f.date}</td>
-                      <td>
-                        <div className="warehouse-file-actions">
-                          <button
-                            className="warehouse-file-btn"
-                            onClick={() => setPreviewFile({ id: f.id, name: f.name, size: f.size, type: f.type })}
-                            aria-label={`预览 ${f.name}`}
-                            title="在线预览"
-                          >
-                            <IconEye />
-                          </button>
-                          <button
-                            className="warehouse-file-btn"
-                            onClick={() => downloadAttachment(f.id, f.name)}
-                            aria-label={`下载 ${f.name}`}
-                            title="下载"
-                          >
-                            <IconDownload />
-                          </button>
-                          <button
-                            className="warehouse-delete-btn"
-                            onClick={() => onDeleteAttachment(f.postId, f.id)}
-                            aria-label={`删除 ${f.name}`}
-                            title="删除"
-                          >
-                            <IconTrash />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {fileGroups.loose.map(f => renderFileRow(f))}
+                  {fileGroups.folders.map(g => {
+                    const open = openFolders.includes(g.name)
+                    const totalSize = g.files.reduce((sum, f) => sum + f.size, 0)
+                    return (
+                      <Fragment key={`folder-${g.name}`}>
+                        <tr className="warehouse-folder-row">
+                          <td colSpan={6}>
+                            <button
+                              type="button"
+                              className="warehouse-folder-toggle"
+                              onClick={() => toggleFolder(g.name)}
+                              aria-expanded={open}
+                            >
+                              <span className={`warehouse-folder-chevron ${open ? 'open' : ''}`}><IconChevronLeft /></span>
+                              <IconFolder />
+                              <span className="warehouse-folder-name">{g.name}</span>
+                              <span className="warehouse-folder-meta">{g.files.length} 个文件 · {formatFileSize(totalSize)}</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {open && g.files.map(f => renderFileRow(f, g.name))}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
               {filteredFiles.length === 0 && (

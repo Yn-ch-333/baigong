@@ -57,6 +57,10 @@ function App() {
     if (m.recalled) return '撤回了一条消息'
     const first = m.attachments?.[0]
     if (first) {
+      if (first.folder) {
+        const count = m.attachments?.length || 1
+        return m.content ? `[文件夹] ${count} 个文件 ${m.content}` : `[文件夹] ${count} 个文件`
+      }
       const kind = first.type.startsWith('image/')
         ? '[图片]'
         : first.type.startsWith('video/') ? '[视频]' : '[文件]'
@@ -190,15 +194,14 @@ function App() {
     setPage('posts')
   }, [])
 
-  const handlePost = useCallback((p: Post) => {
-    api.createPost({
+  const handlePost = useCallback(async (p: Post) => {
+    const { post } = await api.createPost({
       title: p.title,
       summary: p.summary,
       category: p.category,
       attachments: p.attachments,
-    }).then(({ post }) => {
-      setPosts(prev => [post, ...prev])
-    }).catch(err => console.error('发帖失败', err))
+    })
+    setPosts(prev => [post, ...prev])
   }, [])
 
   const handleDeletePost = useCallback((postId: string) => {
@@ -264,13 +267,12 @@ function App() {
     setCategories(prev => prev.filter(c => c.id !== categoryId))
   }, [])
 
-  const handleSendMessage = useCallback((receiverId: string, content: string, fileIds?: string[]) => {
+  const handleSendMessage = useCallback(async (receiverId: string, content: string, fileIds?: string[]) => {
     const trimmed = content.trim()
     const ids = fileIds || []
     if (!trimmed && ids.length === 0) return
-    api.sendMessage(receiverId, trimmed, ids).then(({ message }) => {
-      setMessages(prev => [...prev, message])
-    }).catch(err => console.error('发送私信失败', err))
+    const { message } = await api.sendMessage(receiverId, trimmed, ids)
+    setMessages(prev => [...prev, message])
   }, [])
 
   const handleRecallMessage = useCallback(async (messageId: string) => {

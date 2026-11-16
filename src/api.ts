@@ -1,6 +1,7 @@
 import type {
   User, Post, Category, Comment, Message, WarehouseItem, Collection, Attachment, RadioTrack,
 } from './types'
+import { fileRelativeFolder } from './fileStore'
 
 const TOKEN_KEY = 'baigong-token'
 
@@ -215,12 +216,42 @@ export function markMessageRead(id: string) {
   return request<{ ok: true }>(`/messages/${id}/read`, { method: 'POST' })
 }
 
-export function uploadFile(file: File): Promise<Attachment> {
+/** 上传附件，onProgress 返回 0-100 的上传进度 */
+export function uploadFile(file: File, onProgress?: (percent: number) => void): Promise<Attachment> {
   const fd = new FormData()
-  // 文件夹上传时保留相对路径，附件名更容易辨认
-  const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath
-  fd.append('file', file, relative || file.name)
-  return request<Attachment>('/files', { method: 'POST', body: fd })
+  // 文件夹上传时保留目录结构：文件名保持原样，目录作为 folder 单独提交
+  const folder = fileRelativeFolder(file)
+  fd.append('file', file, file.name)
+  if (folder) fd.append('folder', folder)
+  // 用 XHR 才能拿到上传进度；fetch 目前无法上报进度
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/files')
+    xhr.timeout = 120000
+    const token = getToken()
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      let data: (Attachment & { error?: string }) | null = null
+      try {
+        data = JSON.parse(xhr.responseText)
+      } catch {
+        data = null
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && data) {
+        onProgress?.(100)
+        resolve(data)
+      } else {
+        reject(new Error(data?.error || `上传失败（${xhr.status}）`))
+      }
+    }
+    xhr.onerror = () => reject(new Error('网络连接中断，上传失败'))
+    xhr.ontimeout = () => reject(new Error('上传超时（120 秒），请检查网络或压缩文件后重试'))
+    xhr.onabort = () => reject(new Error('上传已取消'))
+    xhr.send(fd)
+  })
 }
 
 export function deleteFile(id: string) {
