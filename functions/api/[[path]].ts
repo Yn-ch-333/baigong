@@ -21,7 +21,7 @@ interface D1Database {
 }
 interface KVObjectMeta { contentType?: string }
 interface KVNamespace {
-  put(key: string, value: ArrayBuffer | ReadableStream | string, options?: { metadata?: KVObjectMeta }): Promise<void>
+  put(key: string, value: ArrayBuffer | ReadableStream | string, options?: { metadata?: KVObjectMeta; expirationTtl?: number }): Promise<void>
   getWithMetadata(key: string, options?: { type: 'arrayBuffer' }): Promise<{ value: ArrayBuffer | null; metadata: KVObjectMeta | null }>
   delete(key: string): Promise<void>
 }
@@ -137,6 +137,7 @@ async function ensureSchema(env: Env): Promise<void> {
     'CREATE TABLE IF NOT EXISTS sms_codes (id TEXT PRIMARY KEY, phone TEXT NOT NULL, code TEXT NOT NULL, purpose TEXT NOT NULL, user_id TEXT, attempts INTEGER DEFAULT 0, used INTEGER DEFAULT 0, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)',
     "ALTER TABLE messages ADD COLUMN files TEXT DEFAULT ''",
     "ALTER TABLE files ADD COLUMN folder TEXT DEFAULT ''",
+    "ALTER TABLE files ADD COLUMN chunks INTEGER DEFAULT 0",
   ]
   for (const sql of statements) {
     try {
@@ -784,13 +785,9 @@ async function deletePost(req: Request, env: Env, params: string[]): Promise<Res
   const row = await env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
   if (!row) return err('帖子不存在', 404)
   if (row.author_id !== u.id && !(await canModeratePost(env, u, row.category))) return err('无权删除该帖子', 403)
-  const files = await env.DB.prepare('SELECT id FROM files WHERE post_id = ?').bind(id).all<{ id: string }>()
+  const files = await env.DB.prepare('SELECT id, chunks FROM files WHERE post_id = ?').bind(id).all<{ id: string; chunks: number }>()
   for (const f of files.results || []) {
-    try {
-      await env.FILES.delete(f.id)
-    } catch {
-      // R2 对象可能已不存在，忽略
-    }
+    await deleteFileObjects(env, f.id, f.chunks || 0)
   }
   await env.DB.batch([
     env.DB.prepare('DELETE FROM comments WHERE post_id = ?').bind(id),
@@ -1285,6 +1282,10 @@ async function markMessageRead(req: Request, env: Env, params: string[]): Promis
 }
 
 // ---------- 文件 ----------
+// KV 单个值上限 25MB：大文件由前端切成 20MB 分片，逐片存入 KV，下载时按序拼流
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
+const MAX_CHUNKS = 200
+
 async function uploadFile(req: Request, env: Env): Promise<Response> {
   const u = await requireUser(req, env)
   if (u instanceof Response) return u
@@ -1294,7 +1295,7 @@ async function uploadFile(req: Request, env: Env): Promise<Response> {
   const f = file as File
   const id = crypto.randomUUID()
   const type = f.type || 'application/octet-stream'
-  if (f.size > 25 * 1024 * 1024) return err('文件超过 25MB（免费版单文件上限），请压缩后上传', 413)
+  if (f.size > 25 * 1024 * 1024) return err('单次上传上限 25MB，大文件会自动分片上传', 413)
   const buf = await f.arrayBuffer()
   await env.FILES.put(id, buf, { metadata: { contentType: type } })
   const rawFolder = form.get('folder')
@@ -1309,20 +1310,103 @@ async function uploadFile(req: Request, env: Env): Promise<Response> {
   return json({ id, name: f.name, size: f.size, type, folder: folder || undefined })
 }
 
+async function uploadChunk(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const form = await req.formData()
+  const chunk = form.get('chunk')
+  if (!chunk || typeof chunk === 'string') return err('未收到分片', 400)
+  const blob = chunk as File
+  const uploadId = String(form.get('uploadId') || '')
+  const index = Number(form.get('index'))
+  if (!/^[a-zA-Z0-9-]{8,64}$/.test(uploadId)) return err('上传标识无效', 400)
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_CHUNKS) return err('分片序号无效', 400)
+  if (blob.size > 25 * 1024 * 1024) return err('单个分片超过 25MB', 413)
+  const buf = await blob.arrayBuffer()
+  await env.FILES.put(`${uploadId}.part${index}`, buf, {
+    expirationTtl: 86400,
+    metadata: { contentType: blob.type || 'application/octet-stream' },
+  })
+  return json({ ok: true })
+}
+
+async function finishUpload(req: Request, env: Env): Promise<Response> {
+  const u = await requireUser(req, env)
+  if (u instanceof Response) return u
+  const body = await req.json().catch(() => ({})) as any
+  const uploadId = String(body.uploadId || '')
+  const name = String(body.name || '').trim()
+  const size = Number(body.size)
+  const chunks = Number(body.chunks)
+  const type = String(body.type || 'application/octet-stream')
+  const rawFolder = String(body.folder || '')
+  const folder = rawFolder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').slice(0, 300)
+  if (!/^[a-zA-Z0-9-]{8,64}$/.test(uploadId)) return err('上传标识无效', 400)
+  if (!name) return err('文件名不能为空', 400)
+  if (!Number.isInteger(chunks) || chunks < 1 || chunks > MAX_CHUNKS) return err('分片数量无效', 400)
+  if (!Number.isFinite(size) || size <= 0 || size > MAX_FILE_SIZE) return err('文件超过 2GB 上限', 413)
+  if (size > chunks * 25 * 1024 * 1024) return err('分片数量与文件大小不匹配', 400)
+  const exist = await env.DB.prepare('SELECT id FROM files WHERE id = ?').bind(uploadId).first()
+  if (exist) return err('该上传已完成', 409)
+  await env.DB.prepare(
+    'INSERT INTO files (id, name, size, type, uploader_id, created_at, post_id, folder, chunks) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)'
+  )
+    .bind(uploadId, name.slice(0, 200), size, type, u.id, Date.now(), folder, chunks)
+    .run()
+  return json({ id: uploadId, name, size, type, folder: folder || undefined })
+}
+
+async function deleteFileObjects(env: Env, id: string, chunks: number) {
+  if (!chunks || chunks <= 0) {
+    try {
+      await env.FILES.delete(id)
+    } catch {
+      // 对象可能已不存在，忽略
+    }
+    return
+  }
+  for (let i = 0; i < chunks; i++) {
+    try {
+      await env.FILES.delete(`${id}.part${i}`)
+    } catch {
+      // 分片可能已不存在，忽略
+    }
+  }
+}
+
 async function getFile(_req: Request, env: Env, params: string[], url: URL): Promise<Response> {
   const id = params[0]
   const meta = await env.DB.prepare('SELECT * FROM files WHERE id = ?').bind(id).first<any>()
   if (!meta) return err('文件不存在', 404)
-  const obj = await env.FILES.getWithMetadata(id, { type: 'arrayBuffer' })
-  if (!obj.value) return err('文件不存在', 404)
   const download = url.searchParams.get('download') === '1'
   const headers = new Headers()
-  headers.set('Content-Type', meta.type || obj.metadata?.contentType || 'application/octet-stream')
+  headers.set('Content-Type', meta.type || 'application/octet-stream')
   headers.set(
     'Content-Disposition',
     `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(meta.name || 'file')}`
   )
   if (meta.size != null) headers.set('Content-Length', String(meta.size))
+  const chunks = Number(meta.chunks) || 0
+  if (chunks > 0) {
+    // 分片文件：按序读取各分片并拼成流返回，前端无需感知
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for (let i = 0; i < chunks; i++) {
+            const part = await env.FILES.getWithMetadata(`${id}.part${i}`, { type: 'arrayBuffer' })
+            if (!part.value) throw new Error(`缺少分片 ${i}`)
+            controller.enqueue(new Uint8Array(part.value))
+          }
+          controller.close()
+        } catch (e) {
+          controller.error(e)
+        }
+      },
+    })
+    return new Response(stream, { headers })
+  }
+  const obj = await env.FILES.getWithMetadata(id, { type: 'arrayBuffer' })
+  if (!obj.value) return err('文件不存在', 404)
   return new Response(obj.value, { headers })
 }
 
@@ -1330,14 +1414,10 @@ async function deleteFile(req: Request, env: Env, params: string[]): Promise<Res
   const u = await requireUser(req, env)
   if (u instanceof Response) return u
   const id = params[0]
-  const meta = await env.DB.prepare('SELECT uploader_id FROM files WHERE id = ?').bind(id).first<{ uploader_id: string }>()
+  const meta = await env.DB.prepare('SELECT uploader_id, chunks FROM files WHERE id = ?').bind(id).first<{ uploader_id: string; chunks: number }>()
   if (!meta) return err('文件不存在', 404)
   if (meta.uploader_id !== u.id && u.role !== 'admin') return err('无权删除该文件', 403)
-  try {
-    await env.FILES.delete(id)
-  } catch {
-    // R2 对象可能已不存在，忽略
-  }
+  await deleteFileObjects(env, id, meta.chunks || 0)
   await env.DB.prepare('DELETE FROM files WHERE id = ?').bind(id).run()
   return json({ ok: true })
 }
@@ -1372,6 +1452,8 @@ const routes: Array<[string, string, Handler]> = [
   ['DELETE', 'warehouse/*', (req, env, p) => deleteWarehouseItem(req, env, p)],
   ['GET', 'messages', (req, env) => listMessages(req, env)],
   ['POST', 'messages', (req, env) => sendMessage(req, env)],
+  ['POST', 'files/chunk', (req, env) => uploadChunk(req, env)],
+  ['POST', 'files/finish', (req, env) => finishUpload(req, env)],
   ['DELETE', 'messages/*', (req, env, p) => recallMessage(req, env, p)],
   ['POST', 'messages/*/read', (req, env, p) => markMessageRead(req, env, p)],
   ['POST', 'files', (req, env) => uploadFile(req, env)],

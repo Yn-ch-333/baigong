@@ -216,41 +216,83 @@ export function markMessageRead(id: string) {
   return request<{ ok: true }>(`/messages/${id}/read`, { method: 'POST' })
 }
 
-/** 上传附件，onProgress 返回 0-100 的上传进度 */
-export function uploadFile(file: File, onProgress?: (percent: number) => void): Promise<Attachment> {
-  const fd = new FormData()
-  // 文件夹上传时保留目录结构：文件名保持原样，目录作为 folder 单独提交
-  const folder = fileRelativeFolder(file)
-  fd.append('file', file, file.name)
-  if (folder) fd.append('folder', folder)
-  // 用 XHR 才能拿到上传进度；fetch 目前无法上报进度
+/** 单次请求上限：KV 单个值最大 25MB，这里留出余量 */
+const UPLOAD_CHUNK_SIZE = 20 * 1024 * 1024
+
+/** 用 XHR 上传（fetch 无法上报进度），返回服务端 JSON */
+function xhrUpload(url: string, fd: FormData, onLoaded?: (loaded: number) => void): Promise<any> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/files')
+    xhr.open('POST', url)
     xhr.timeout = 120000
     const token = getToken()
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-    xhr.upload.onprogress = e => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+    if (onLoaded) {
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) onLoaded(e.loaded)
+      }
     }
     xhr.onload = () => {
-      let data: (Attachment & { error?: string }) | null = null
+      let data: any = null
       try {
         data = JSON.parse(xhr.responseText)
       } catch {
         data = null
       }
       if (xhr.status >= 200 && xhr.status < 300 && data) {
-        onProgress?.(100)
         resolve(data)
       } else {
         reject(new Error(data?.error || `上传失败（${xhr.status}）`))
       }
     }
     xhr.onerror = () => reject(new Error('网络连接中断，上传失败'))
-    xhr.ontimeout = () => reject(new Error('上传超时（120 秒），请检查网络或压缩文件后重试'))
+    xhr.ontimeout = () => reject(new Error('上传超时（120 秒），请检查网络后重试'))
     xhr.onabort = () => reject(new Error('上传已取消'))
     xhr.send(fd)
+  })
+}
+
+/** 上传附件；大文件自动切成 20MB 分片，onProgress 返回 0-100 的整体进度 */
+export async function uploadFile(file: File, onProgress?: (percent: number) => void): Promise<Attachment> {
+  const folder = fileRelativeFolder(file)
+  const type = file.type || 'application/octet-stream'
+
+  if (file.size <= UPLOAD_CHUNK_SIZE) {
+    const fd = new FormData()
+    fd.append('file', file, file.name)
+    if (folder) fd.append('folder', folder)
+    return xhrUpload('/api/files', fd, loaded => {
+      if (file.size > 0) onProgress?.(Math.round((loaded / file.size) * 100))
+    })
+  }
+
+  // 大文件分片上传：每片单独请求，最后合并登记
+  const uploadId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+  const total = Math.ceil(file.size / UPLOAD_CHUNK_SIZE)
+  for (let i = 0; i < total; i++) {
+    const start = i * UPLOAD_CHUNK_SIZE
+    const end = Math.min(start + UPLOAD_CHUNK_SIZE, file.size)
+    const fd = new FormData()
+    fd.append('chunk', file.slice(start, end), file.name)
+    fd.append('uploadId', uploadId)
+    fd.append('index', String(i))
+    await xhrUpload('/api/files/chunk', fd, loaded => {
+      onProgress?.(Math.round(((start + loaded) / file.size) * 100))
+    })
+    onProgress?.(Math.round((end / file.size) * 100))
+  }
+  return request<Attachment>('/files/finish', {
+    method: 'POST',
+    body: JSON.stringify({
+      uploadId,
+      name: file.name,
+      size: file.size,
+      type,
+      folder: folder || undefined,
+      chunks: total,
+    }),
   })
 }
 

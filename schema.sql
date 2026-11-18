@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS files (
   uploader_id TEXT,
   created_at INTEGER,
   post_id TEXT,
-  folder TEXT DEFAULT ''
+  folder TEXT DEFAULT '',
+  chunks INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS tracks (
